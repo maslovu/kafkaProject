@@ -9,9 +9,8 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>api</artifactId>
+    <artifactId>app</artifactId>
 
-    <!-- ВНУТРИ /api/pom.xml -->
     <build>
         <plugins>
             <!-- Здесь он отработает правильно, создав исполняемый JAR только для API -->
