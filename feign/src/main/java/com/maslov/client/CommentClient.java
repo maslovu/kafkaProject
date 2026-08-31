@@ -6,9 +6,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(name = "", url = "{services.books-maslov.url}", path = "{services.books-maslov.path}")
+@FeignClient(name = "commentClient", url = "${services.books-maslov.url}", path = "${services.books-maslov.path}")
 public interface CommentClient {
 
     @PostMapping("/{bookId}/comment")
-    void createComment(@PathVariable("bookId") String bookId, @RequestBody CommentRequest comment);
+    CommentRequest createComment(@PathVariable("bookId") String bookId, @RequestBody CommentRequest comment);
 }

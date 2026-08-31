@@ -11,4 +11,25 @@
 
     <artifactId>api</artifactId>
 
+    <!-- ВНУТРИ /api/pom.xml -->
+    <build>
+        <plugins>
+            <!-- Здесь он отработает правильно, создав исполняемый JAR только для API -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.maslov.ConsumerApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>
