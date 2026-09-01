@@ -1,4 +1,4 @@
-package com.maslov.client;
+package com.maslov;
 
 import com.maslov.dto.CommentEvent;
 import org.springframework.cloud.openfeign.FeignClient;

@@ -8,16 +8,25 @@ services:
 
 spring:
   kafka:
+    listener:
+      type: batch # Обязательно для работы ConsumerRecords вместо ConsumerRecord
     bootstrap-server: localhost:9092
     consumer:
       group-id: comment-group
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         max.poll.records: 50
+        spring.json.value.default.type: "com.maslov.dto.CommentEvent"
       fetch-max-wait-ms: 5000
       fetch-min-bytes: 1
 
 server:
   port: 8081
+
+logging:
+  level:
+    root: INFO
+    org.springframework.kafka: INFO
+    org.apache.kafka: INFO

@@ -1,5 +1,6 @@
-package com.maslov.configuration;
+package com.maslov.configs;
 
+import com.maslov.dto.CommentEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -16,6 +17,7 @@ import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 
@@ -52,14 +54,24 @@ public class KafkaBatchConsumerConfig {
     public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
-        // Обязательно использовать ErrorHandlingDeserializer для JSON,
-        // чтобы не падал весь батч из-за одного битого сообщения
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                "org.springframework.kafka.support.serializer.ErrorHandlingDeserializer");
-        props.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS,
-                "org.springframework.kafka.support.serializer.JsonDeserializer");
+        props.put(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, 5000);
 
-        return new DefaultKafkaConsumerFactory<>(props);
+        // 2. Настраиваем безопасность пакетов JSON [70.1]
+        JsonDeserializer<Object> jsonDeserializer = new JsonDeserializer<>(Object.class);
+        jsonDeserializer.addTrustedPackages("*"); // Доверяем всем пакетам [70.1]
+        jsonDeserializer.setUseTypeHeaders(false); // Игнорируем заголовки типов продюсера [70.1]
+
+        // 2. ИСПРАВЛЕНО: Оборачиваем его в ErrorHandlingDeserializer
+        // Это защитит консьюмер от падения при встрече с битым JSON
+        ErrorHandlingDeserializer<Object> errorHandlingDeserializer =
+                new ErrorHandlingDeserializer<>(jsonDeserializer);
+
+        // 3. ИСПРАВЛЕНО: Явно передаем StringDeserializer и настроенный JsonDeserializer в фабрику
+        return new DefaultKafkaConsumerFactory<>(
+                props,
+                new StringDeserializer(),
+                jsonDeserializer
+        );
     }
 
     @Bean

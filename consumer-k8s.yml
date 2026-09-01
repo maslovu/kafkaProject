@@ -21,4 +21,4 @@ spec:
           env:
             # Направляем консьюмер на работающий в кластере брокер Kafka
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka-0.kafka-service:9092"
+              value: "kafka-service:9092"

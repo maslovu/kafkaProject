@@ -19,4 +19,6 @@ WORKDIR /app
 # Теперь мы берем гарантированно существующий /app/app.jar из корня сборщика!
 COPY --from=builder /app/app.jar /app/app.jar
 
+EXPOSE 8081
+
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
