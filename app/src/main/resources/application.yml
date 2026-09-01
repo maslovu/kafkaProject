@@ -14,3 +14,10 @@ spring:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        max.poll.records: 50
+      fetch-max-wait-ms: 5000
+      fetch-min-bytes: 1
+
+server:
+  port: 8081
