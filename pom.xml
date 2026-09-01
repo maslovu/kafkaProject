@@ -102,6 +102,13 @@
                     <configuration>
                         <mainClass>com.example.kafkaProject.KafkaProjectApplication</mainClass>
                     </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
             </plugins>
         </pluginManagement>

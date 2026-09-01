@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-consumer-deployment
+  labels:
+    app: kafka-consumer
+spec:
+  replicas: 1 # Для начала запускаем одну копию слушателя
+  selector:
+    matchLabels:
+      app: kafka-consumer
+  template:
+    metadata:
+      labels:
+        app: kafka-consumer
+    spec:
+      containers:
+        - name: kafka-consumer-container
+          image: kafka-consumer-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            # Направляем консьюмер на работающий в кластере брокер Kafka
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-0.kafka-service:9092"

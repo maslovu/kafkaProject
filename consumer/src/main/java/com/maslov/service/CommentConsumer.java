@@ -18,7 +18,7 @@ public class CommentConsumer {
     CommentClient commentClient;
 
     @KafkaListener(
-            topics = "comment-batch-topic",
+            topics = "comments-topic",
             groupId = "comment-group-id",
             concurrency = "3",
             containerFactory = "batchFactory"
