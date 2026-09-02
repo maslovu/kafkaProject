@@ -13,9 +13,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <modules>
-        <module>app</module>
         <module>shared</module>
         <module>feign</module>
+        <module>app</module>
     </modules>
 
     <groupId>com.maslov</groupId>
@@ -28,22 +28,29 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <revision>1.0.0</revision>
+        <lombok.version>1.18.36</lombok.version>
     </properties>
 
     <dependencies>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-openfeign</artifactId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <!--версия spring-boot2 подходит и для Boot 3.x из-за внутренней структуры пакетов-->
+            <artifactId>resilience4j-spring-boot3</artifactId>
         </dependency>
     </dependencies>
 
@@ -99,7 +106,7 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <configuration>
-                        <mainClass>com.example.kafkaProject.KafkaProjectApplication</mainClass>
+                        <mainClass>com.maslov.app.ConsumerApplication</mainClass>
                     </configuration>
                     <executions>
                         <execution>
@@ -115,6 +122,13 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-bom</artifactId>
+                <version>2.4.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies

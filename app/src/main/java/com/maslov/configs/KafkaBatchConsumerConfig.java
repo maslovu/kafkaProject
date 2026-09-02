@@ -51,22 +51,18 @@ public class KafkaBatchConsumerConfig {
     }
 
     @Bean
-    public ConsumerFactory<String, Object> consumerFactory() {
+    public ConsumerFactory<String, CommentEvent> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
         props.put(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, 5000);
+        //added two configs 01.09.26
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 50);
+        props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 5000);
 
-        // 2. Настраиваем безопасность пакетов JSON [70.1]
-        JsonDeserializer<Object> jsonDeserializer = new JsonDeserializer<>(Object.class);
-        jsonDeserializer.addTrustedPackages("*"); // Доверяем всем пакетам [70.1]
-        jsonDeserializer.setUseTypeHeaders(false); // Игнорируем заголовки типов продюсера [70.1]
+        //Настраиваем безопасность пакетов JSON
+        JsonDeserializer<CommentEvent> jsonDeserializer = getObjectJsonDeserializer();
 
-        // 2. ИСПРАВЛЕНО: Оборачиваем его в ErrorHandlingDeserializer
-        // Это защитит консьюмер от падения при встрече с битым JSON
-        ErrorHandlingDeserializer<Object> errorHandlingDeserializer =
-                new ErrorHandlingDeserializer<>(jsonDeserializer);
-
-        // 3. ИСПРАВЛЕНО: Явно передаем StringDeserializer и настроенный JsonDeserializer в фабрику
+        //Явно передаем StringDeserializer и настроенный JsonDeserializer в фабрику
         return new DefaultKafkaConsumerFactory<>(
                 props,
                 new StringDeserializer(),
@@ -75,10 +71,10 @@ public class KafkaBatchConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, Object> batchFactory(
-            ConsumerFactory<String, Object> kafkaConsumerFactory,
+    public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> batchFactory(
+            ConsumerFactory<String, CommentEvent> kafkaConsumerFactory,
             KafkaTemplate<String, Object> kafkaTemplate) {
-        ConcurrentKafkaListenerContainerFactory<String, Object> factory =
+        ConcurrentKafkaListenerContainerFactory<String, CommentEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(kafkaConsumerFactory);
@@ -96,5 +92,17 @@ public class KafkaBatchConsumerConfig {
         factory.setCommonErrorHandler(errorHandler);
 
         return factory;
+    }
+
+    private static JsonDeserializer<CommentEvent> getObjectJsonDeserializer() {
+        JsonDeserializer<CommentEvent> jsonDeserializer = new JsonDeserializer<>(CommentEvent.class);
+        jsonDeserializer.addTrustedPackages("*"); // Доверяем всем пакетам [70.1]
+        jsonDeserializer.setUseTypeHeaders(false); // Игнорируем заголовки типов продюсера [70.1]
+
+        // Оборачиваем его в ErrorHandlingDeserializer
+        // Это защитит консьюмер от падения при встрече с битым JSON
+        ErrorHandlingDeserializer<CommentEvent> errorHandlingDeserializer =
+                new ErrorHandlingDeserializer<>(jsonDeserializer);
+        return jsonDeserializer;
     }
 }

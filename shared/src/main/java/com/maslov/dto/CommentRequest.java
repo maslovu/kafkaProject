@@ -1,5 +1,10 @@
 package com.maslov.dto;
 
-public record CommentRequest(
-        String text
-) {}
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
+
+@Data
+public class CommentRequest {
+    @JsonProperty("text")
+    private String text;
+}

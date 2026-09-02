@@ -1,29 +1,25 @@
 package com.maslov.service;
 
-import com.maslov.CommentClient;
 import com.maslov.dto.CommentEvent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CommentConsumer {
 
-    private final CommentClient commentClient;
+    private final ExternalApiSender sender;
 
-    private final BlockingQueue<CommentEvent> buffer = new LinkedBlockingQueue<>();
-
-    private static final int BATCH_SIZE_THRESHOLD = 50;
+    public CommentConsumer(ExternalApiSender sender) {
+        this.sender = sender;
+    }
 
     @KafkaListener(
             topics = "comments-topic",
@@ -32,34 +28,28 @@ public class CommentConsumer {
             containerFactory = "batchFactory"
     )
     public void listenInBatch(ConsumerRecords<String, CommentEvent> records) {
+        if (records.isEmpty() || records.count() == 0) {
+            return; // Выходим сразу, нечего обрабатывать
+        }
+
         log.info("Got batch with size: " + records.count());
 
+
+        List<CommentEvent> events = new ArrayList<>();
+
         for (ConsumerRecord<String, CommentEvent> record : records) {
-            buffer.add(record.value());
+            log.info("check null");
+            if (record.value() != null) {
+                events.add(record.value());
+                log.info("Filtered non-null messages count: {}", events.size());
+            }
         }
 
-        if (buffer.size() >= BATCH_SIZE_THRESHOLD) {
-            flushBuffer();
-        }
-    }
-
-    private synchronized void flushBuffer() {
-        // Проверяем размер еще раз внутри синхронизированного блока
-        if (buffer.size() < BATCH_SIZE_THRESHOLD) {
-            return;
-        }
-
-        // Извлекаем элементы для отправки в локальный список
-        List<CommentEvent> batchToSend = new ArrayList<>();
-        buffer.drainTo(batchToSend, BATCH_SIZE_THRESHOLD);
-
-        try {
-            log.info("Отправка пакета из {} комментариев через Feign...", batchToSend.size());
-            commentClient.sendCommentsBatch(batchToSend);
-            log.info("Пакет успешно доставлен.");
-        } catch (Exception e) {
-            log.error("Ошибка отправки пакета! Возвращаем элементы обратно в буфер для повторной попытки", e);
-            throw e; // Пробрасываем ошибку, чтобы Kafka не сдвигала Offset (Ack)
+        if (!events.isEmpty()) {
+            sender.send(events);
+            log.info("Package sends successfully");
+        } else {
+            log.error("Received empty or null-only batch from Kafka.");
         }
     }
 }

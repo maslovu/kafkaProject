@@ -5,20 +5,13 @@ COPY . .
 
 # Собираем проект. Maven сам найдет запускаемый модуль,
 # выполнит repackage и создаст исполняемый JAR.
-RUN mvn clean package -DskipTests -B
-
-# ХИТРОСТЬ: Находим созданный исполняемый JAR-файл в любом месте проекта
-# и копируем его в фиксированное место в корне сборщика под именем app.jar.
-# Это избавит нас от жестко прописанных путей вида /app/consumer/target/...
-RUN cp /app/app/target/*.jar /app/app.jar
+RUN mvn clean install -DskipTests -B
 
 # === ЭТАП 2: Запуск ===
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-# Теперь мы берем гарантированно существующий /app/app.jar из корня сборщика!
-COPY --from=builder /app/app.jar /app/app.jar
-
-EXPOSE 8081
+# Берем файл напрямую из папки target модуля app, а не из корня /app/app.jar!
+COPY --from=builder /app/app/target/app-*.jar /app/app.jar
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
