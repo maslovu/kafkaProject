@@ -37,7 +37,6 @@ public class CommentConsumer {
         List<CommentEvent> events = new ArrayList<>();
 
         for (ConsumerRecord<String, CommentEvent> record : records) {
-            log.info("check null");
             if (record.value() != null) {
                 events.add(record.value());
                 log.info("Filtered non-null messages count: {}", events.size());

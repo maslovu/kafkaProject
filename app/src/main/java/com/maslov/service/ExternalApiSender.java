@@ -2,6 +2,8 @@ package com.maslov.service;
 
 import com.maslov.client.CommentClient;
 import com.maslov.dto.CommentEvent;
+import feign.FeignException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -23,5 +25,25 @@ public class ExternalApiSender {
         log.info("Попытка отправки пакета размером {}...", batch.size());
         commentClient.sendCommentsBatch(batch);
         log.info("Пакет успешно доставлен.");
+    }
+
+    public void fallbackSend(List<CommentEvent> batch, Throwable t) {
+        log.error("Fallback triggered. Причина:", t); // <-- Распечатай стектрейс целиком!
+
+        if (t instanceof CallNotPermittedException) {
+            log.warn("CB OPEN: Запрос заблокирован.", t);
+        } else if (t instanceof FeignException) {
+            log.error("FEIGN RETRY EXHAUSTED: Внешний сервис недоступен.", t);
+        } else {
+            log.error("UNKNOWN ERROR in API Sender.", t);
+        }
+
+        // НЕ бросаем Exception! Даем Кафке закоммитить офсет, чтобы не заблокировать поток.
+        saveToDeadLetterQueue(batch);
+    }
+
+    private void saveToDeadLetterQueue(List<CommentEvent> batch) {
+        // Логика резервного сохранения (например, запись в файл, в БД otus или в специальный топик-ошибок comments-dlq)
+        log.info("Резервное сохранение {} элементов завершено.", batch.size());
     }
 }
