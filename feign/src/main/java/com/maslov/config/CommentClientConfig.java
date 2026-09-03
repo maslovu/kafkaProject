@@ -2,14 +2,10 @@ package com.maslov.config;
 
 import feign.Client;
 import feign.Logger;
-import feign.RetryableException;
-import feign.codec.DecodeException;
 import feign.codec.ErrorDecoder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.io.IOException;
 
 @Configuration
 @RequiredArgsConstructor
@@ -34,7 +30,7 @@ public class CommentClientConfig {
                     return feign.FeignException.errorStatus(methodKey, response);
                 }
 
-                if (response.status() >= 400 && response.status() < 500) {
+                if (response.status() >= 400) {
                     return feign.FeignException.errorStatus(methodKey, response);
                 }
 

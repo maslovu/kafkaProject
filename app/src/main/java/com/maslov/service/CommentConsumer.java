@@ -7,7 +7,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,10 +28,10 @@ public class CommentConsumer {
     )
     public void listenInBatch(ConsumerRecords<String, CommentEvent> records) {
         if (records.isEmpty() || records.count() == 0) {
-            return; // Выходим сразу, нечего обрабатывать
+            return;
         }
 
-        log.info("Got batch with size: " + records.count());
+        log.info("Got batch with size: {}", records.count());
 
 
         List<CommentEvent> events = new ArrayList<>();

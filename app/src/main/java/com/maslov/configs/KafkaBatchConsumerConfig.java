@@ -55,7 +55,6 @@ public class KafkaBatchConsumerConfig {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
         props.put(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, 5000);
-        //added two configs 01.09.26
         props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 50);
         props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 5000);
 
