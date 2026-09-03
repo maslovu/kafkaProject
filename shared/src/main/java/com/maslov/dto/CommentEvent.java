@@ -1,9 +1,12 @@
 package com.maslov.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
 public class CommentEvent {
-    private String bookId;
-    private CommentRequest comment;
+    @JsonProperty("book_id")
+    private Long bookId;
+    @JsonProperty("comment")
+    private String comment;
 }

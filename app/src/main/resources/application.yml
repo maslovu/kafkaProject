@@ -1,16 +1,56 @@
 application:
   name: consumer
 
-services:
-  books-maslov:
-    url: localhost:8080
-    path: /api/books
-
 spring:
   kafka:
-    bootstrap-server: localhost:9092
+    listener:
+      type: batch # Обязательно для работы ConsumerRecords вместо ConsumerRecord
+    bootstrap-servers: localhost:9092
     consumer:
       group-id: comment-group
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        max.poll.records: 50
+        spring.json.use.type.headers: false # ВАЖНО! Отключает использование заголовков типов Кафки
+        spring.deserialization.fail.on.unknown.properties: false # Игнорируем лишние поля
+      fetch-max-wait-ms: 5000
+      fetch-min-bytes: 1
+  cloud:
+    loadbalancer:
+      cache:
+        ttl: 30
+
+server:
+  port: 8081
+
+logging:
+  level:
+    root: INFO
+    org.springframework.kafka: INFO
+    org.apache.kafka: INFO
+
+management:
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  retry:
+    instances:
+      commentApiRetry:
+        maxAttempts: 3            # Количество попыток
+        waitDuration: 1000ms      # Пауза между попытками (1 секунда)
+        retryExceptions:
+          - feign.FeignException  # На какие ошибки реагировать
+  circuitbreaker:
+    instances:
+      commentApiBreaker: # Имя нашего выключателя
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 5 # Смотрим на последние 5 вызовов
+        failureRateThreshold: 50 # Если 50% неудач - открываем цепь
+        waitDurationInOpenState: 30s # Сколько секунд ждем перед попыткой Half-Open
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true

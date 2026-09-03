@@ -11,6 +11,24 @@
 
     <artifactId>app</artifactId>
 
+    <dependencies>
+        <dependency>
+            <groupId>com.maslov</groupId>
+            <artifactId>feign</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.maslov</groupId>
+            <artifactId>shared</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+    </dependencies>
+
     <build>
         <plugins>
             <!-- Здесь он отработает правильно, создав исполняемый JAR только для API -->
