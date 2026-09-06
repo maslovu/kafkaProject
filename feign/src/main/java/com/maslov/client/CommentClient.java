@@ -3,6 +3,7 @@ package com.maslov.client;
 import com.maslov.config.CommentClientConfig;
 import com.maslov.dto.CommentEvent;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +17,6 @@ import java.util.List;
         configuration = CommentClientConfig.class)
 public interface CommentClient {
 
-    @PostMapping("/comment/batch")
+    @PostMapping(value = "/comment/batch", consumes = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Void> sendCommentsBatch(@RequestBody List<CommentEvent> comments);
 }

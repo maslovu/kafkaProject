@@ -6,6 +6,8 @@ import feign.codec.ErrorDecoder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 @Configuration
 @RequiredArgsConstructor
@@ -44,5 +46,14 @@ public class CommentClientConfig {
     public Client client() {
         return new Client.Default(null, null) {
         };
+    }
+
+    // Выделяем отдельный пул под внешние HTTP-вызовы, чтобы не занимать потоки Tomcat
+    @Bean("httpScheduler")
+    public Scheduler httpScheduler() {
+        return Schedulers.newBoundedElastic(
+                50, // количество потоков
+                60, // TTL нити в секундах
+                "http-scheduler");
     }
 }

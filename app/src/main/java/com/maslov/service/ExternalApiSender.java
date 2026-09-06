@@ -2,44 +2,52 @@ package com.maslov.service;
 
 import com.maslov.client.CommentClient;
 import com.maslov.dto.CommentEvent;
-import feign.FeignException;
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class ExternalApiSender {
+public class ExternalApiSender implements CommentSender {
 
     private final CommentClient commentClient;
+    private final Scheduler httpScheduler;
 
+    @Override
     @Retry(name = "commentApiRetry", fallbackMethod = "fallbackSend")
     @CircuitBreaker(name = "commentApiBreaker")
-    public void send(List<CommentEvent> batch) {
-        log.info("Попытка отправки пакета размером {}...", batch.size());
-        commentClient.sendCommentsBatch(batch);
-        log.info("Пакет успешно доставлен.");
+    @Bulkhead(name = "commentApiBulkhead", type = Bulkhead.Type.SEMAPHORE)
+    @TimeLimiter(name = "commentApiLimiter", fallbackMethod = "fallbackSend")
+    public CompletableFuture<Void> send(List<CommentEvent> batch) {
+        log.info("Асинхронная отправка пакета размером {}...", batch.size());
+        Mono<Void> mono = Mono.fromRunnable(() -> commentClient.sendCommentsBatch(batch))
+                .then()
+                .doOnSuccess(v -> log.info("Пакет успешно доставлен."))
+                .doOnError(e -> log.error("Ошибка при доставке.", e))
+                .subscribeOn(httpScheduler); // Запускаем именно здесь
+        return mono.toFuture();
     }
 
-    public void fallbackSend(List<CommentEvent> batch, Throwable t) {
-        log.error("Fallback triggered. Причина:", t); // <-- Распечатай стектрейс целиком!
-
-        if (t instanceof CallNotPermittedException) {
-            log.warn("CB OPEN: Запрос заблокирован.", t);
-        } else if (t instanceof FeignException) {
-            log.error("FEIGN RETRY EXHAUSTED: Внешний сервис недоступен.", t);
-        } else {
-            log.error("UNKNOWN ERROR in API Sender.", t);
-        }
-
+    public CompletableFuture<Void> fallbackSend(List<CommentEvent> batch, Throwable t) {
+        log.error("Fallback triggered. Причина:", t);
         // НЕ бросаем Exception! Даем Кафке закоммитить офсет, чтобы не заблокировать поток.
-        saveToDeadLetterQueue(batch);
+        try {
+            saveToDeadLetterQueue(batch);
+        } catch (Exception dlqEx) {
+            log.error("CRITICAL: DLQ тоже упал! Сообщения могут быть потеряны.", dlqEx);
+            // Здесь можно рассмотреть повторную попытку записи в БД или отправку алерта
+        }
+        return CompletableFuture.completedFuture(null);
     }
 
     private void saveToDeadLetterQueue(List<CommentEvent> batch) {

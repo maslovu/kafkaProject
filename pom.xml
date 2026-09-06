@@ -61,7 +61,6 @@
         </dependency>
         <dependency>
             <groupId>io.github.resilience4j</groupId>
-            <!--версия spring-boot2 подходит и для Boot 3.x из-за внутренней структуры пакетов-->
             <artifactId>resilience4j-spring-boot3</artifactId>
         </dependency>
     </dependencies>
