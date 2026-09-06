@@ -1,0 +1,82 @@
+application:
+  name: consumer
+
+server:
+  port: 8081
+
+spring:
+  kafka:
+    listener:
+      type: batch # Обязательно для работы ConsumerRecords вместо ConsumerRecord
+      ack-mode: MANUAL_IMMEDIATE # Коммитим вручную по завершении Future
+      concurrency: 3 # Количество потоков-обработчиков пакетов
+      error-handler: default-error-handler
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: comment-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        "[max.poll.records]": 50
+        "[fetch.max.wait.ms]": 5000
+        "[fetch.min.bytes]": 1
+        spring.json.use.type.headers: false # ВАЖНО! Отключает использование заголовков типов Кафки
+        spring.deserialization.fail.on.unknown.properties: false # Игнорируем лишние поля
+        spring.json.value.default.type: com.maslov.dto.CommentEvent
+  cloud:
+    loadbalancer:
+      cache:
+        ttl: 30
+
+logging:
+  level:
+    root: INFO
+    org.springframework.kafka: INFO
+    io.github.resilience4j: DEBUG # Полезно видеть состояния CB/Retry в логах
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - metrics
+          - resilience4j
+          - circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  bulkhead:
+    instances:
+      commentApiBulkhead:
+        max-concurrent-calls: 20
+        max-wait-duration: 10ms
+
+  circuitbreaker:
+    instances:
+      commentApiBreaker: # Имя нашего выключателя
+        registerHealthIndicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20 # Смотрим на последние 20 вызовов
+        failure-rate-threshold: 50 # Если 50% неудач - открываем цепь
+        wait-duration-in-open-state: 30s # Сколько секунд ждем перед попыткой Half-Open
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+
+  retry:
+    instances:
+      commentApiRetry:
+        max-attempts: 3            # Количество попыток
+        wait-duration: 200ms      # Пауза между попытками (0,2 секунды)
+        wait-duration-multiplier: 2.0 # Умножаем паузу: 500 -> 1000 -> 2000
+        retryExceptions:
+          - feign.FeignException  # На какие ошибки реагировать
+
+  timelimiter:
+    instances:
+      commentApiLimiter:
+        timeout-duration: 7s
+        cancel-running-future: true
