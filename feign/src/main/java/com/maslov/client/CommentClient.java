@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import java.util.List;
 
 @FeignClient(
-        name = "commentClient",
-        url = "http://api-app-service:8080/api/books",
+        name = "${feign.client.config.commentClient.name}",
+        url = "${feign.client.config.commentClient.url}",
         contextId = "commentFeignClient",
         configuration = CommentClientConfig.class)
 public interface CommentClient {
