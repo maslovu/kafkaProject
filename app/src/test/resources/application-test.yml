@@ -1,0 +1,61 @@
+wiremock:
+  server:
+    port: 0 # Случайный порт для самого приложения в тесте
+
+# 1. Точечная настройка адреса конкретно для CommentClient
+feign:
+  client:
+    config:
+      commentClient: # <--- ВАЖНО: имя должно совпадать со значением name = "..." в @FeignClient
+        url: http://localhost:${wiremock.server.port}/api/books
+        connect-timeout: 5000
+        read-timeout: 5000
+
+# 2. Отключение облачной инфраструктуры
+spring:
+  main:
+    allow-bean-definition-overriding: true # Полезно при множественном автоконфиге в тестах
+  cloud:
+    discovery:
+      enabled: false
+    loadbalancer:
+      enabled: false
+
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop # Сброс БД для каждого запуска метода/класса
+
+# 3. Resilience4j (исправление таймаутов)
+resilience4j:
+  timelimiter:
+    instances:
+      commentApiLimiter:
+        timeout-duration: 3s # Достаточно времени для ответа локального WireMock
+        cancel-running-future: true
+
+  circuitbreaker:
+    instances:
+      commentApiBreaker:
+        sliding-window-size: 3
+        minimum-number-of-calls: 3
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 1s # Для тестов интервал ожидания должен быть коротким
+
+  retry:
+    instances:
+      commentApiRetry:
+        max-attempts: 1
+
+logging:
+  level:
+    root: INFO
+    org.springframework.kafka: INFO
+    io.github.resilience4j: DEBUG # Полезно видеть состояния CB/Retry в логах
+    org.springframework.web.reactive.function.client.ExchangeFunctions: DEBUG
+    org.springframework.cloud.loadbalancer: TRACE

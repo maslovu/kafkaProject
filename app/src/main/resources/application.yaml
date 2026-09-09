@@ -4,6 +4,13 @@ application:
 server:
   port: 8081
 
+feign:
+  client:
+    config:
+      commentClient:
+        name: commentClient
+        url: http://api-app-service:8080/api/books
+
 spring:
   kafka:
     listener:
@@ -28,12 +35,18 @@ spring:
     loadbalancer:
       cache:
         ttl: 30
+      enabled: true # Оставляем включенным, но даем ему подсказку
+      clients:
+        commentClient:
+          addresses: http://localhost:${wiremock.server.port}/api/books
 
 logging:
   level:
     root: INFO
     org.springframework.kafka: INFO
     io.github.resilience4j: DEBUG # Полезно видеть состояния CB/Retry в логах
+    org.springframework.web.reactive.function.client.ExchangeFunctions: DEBUG
+    org.springframework.cloud.loadbalancer: TRACE
 
 management:
   endpoints:
@@ -62,8 +75,10 @@ resilience4j:
         sliding-window-type: COUNT_BASED
         sliding-window-size: 20 # Смотрим на последние 20 вызовов
         failure-rate-threshold: 50 # Если 50% неудач - открываем цепь
-        wait-duration-in-open-state: 30s # Сколько секунд ждем перед попыткой Half-Open
-        permitted-number-of-calls-in-half-open-state: 2
+        slow-call-duration-threshold: 2s
+        slow-call-rate-threshold: 100
+        permitted-number-of-calls-in-half-open-state: 5
+        wait-duration-in-open-state: 10s # Сколько секунд ждем перед попыткой Half-Open
         automatic-transition-from-open-to-half-open-enabled: true
 
   retry:
@@ -74,9 +89,13 @@ resilience4j:
         wait-duration-multiplier: 2.0 # Умножаем паузу: 500 -> 1000 -> 2000
         retryExceptions:
           - feign.FeignException  # На какие ошибки реагировать
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+          - org.springframework.web.client.ResourceAccessException
 
   timelimiter:
     instances:
       commentApiLimiter:
         timeout-duration: 7s
         cancel-running-future: true
+        time-limiter-strategy: SEMICOLON
