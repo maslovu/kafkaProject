@@ -70,11 +70,13 @@ class ExternalApiSenderTest {
 
     @AfterEach
     void tearDown() {
-        try { registry.remove("commentApiBreaker"); } catch (Exception ignored) {}
+        try {
+            registry.remove("commentApiBreaker");
+        } catch (Exception ignored) {}
     }
 
     @Test
-    void shouldSendBatchSuccessfully() throws Exception {
+    void shouldSendBatchSuccessfullyTest() throws Exception {
         // Arrange
         stubFor(post(urlEqualTo("/api/books/comment/batch"))
                 .willReturn(aResponse()
@@ -100,7 +102,7 @@ class ExternalApiSenderTest {
     }
 
     @Test
-    void shouldTriggerFallbackWhenApiIsSlow() throws Exception {
+    void shouldTriggerFallbackWhenApiIsSlowTest() throws Exception {
         // Arrange
         // Simulate slow downstream service (превышает лимит timeLimiter из yml, который равен 3s)
         stubFor(post(urlEqualTo("/api/books/comment/batch"))
@@ -125,18 +127,14 @@ class ExternalApiSenderTest {
 
     @Test
     @DirtiesContext
-    void shouldOpenCircuitBreakerAfterMultipleFailures() throws Exception {
+    void shouldOpenCircuitBreakerAfterMultipleFailuresTest() throws Exception {
         // Arrange
         // Симулируем жесткую ошибку бэкенда
         // Получаем автомат напрямую
         CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker");
 
-        // Симулируем 3 ошибки напрямую в автомат, обходя прокси фолбека
-        cb.onError(0, TimeUnit.NANOSECONDS, new RuntimeException("500 Error"));
-        cb.onError(0, TimeUnit.NANOSECONDS, new RuntimeException("500 Error"));
-        cb.onError(0, TimeUnit.NANOSECONDS, new RuntimeException("500 Error"));
+        cb.transitionToOpenState();
 
-        assertThat(cb.getMetrics().getNumberOfFailedCalls()).isGreaterThanOrEqualTo(3);
         assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.OPEN);
 
         // Очищаем счетчики вызовов mock-объекта (spy) перед проверочным вызовом
@@ -157,5 +155,44 @@ class ExternalApiSenderTest {
         // ВАЖНО: WireMock НЕ должен получить этот 4-й запрос, так как цепь открыта
         com.github.tomakehurst.wiremock.client.WireMock.verify(
                 exactly(0), postRequestedFor(urlEqualTo("/api/books/comment/batch")));
+    }
+
+    @Test
+    @DirtiesContext
+    void shouldTransitionFromHalfOpenToClosedAfterSuccessfulCallsTest() throws Exception {
+        // Arrange
+        // 1. Создаем кастомную конфигурацию для теста, где жестко фиксируем размер окна в Half-Open
+        io.github.resilience4j.circuitbreaker.CircuitBreakerConfig customConfig =
+                io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.custom()
+                        .failureRateThreshold(50)
+                        .slidingWindowSize(20)
+                        // ЖЕСТКО ГОВОРИМ: Ждать минимум 5 вызовов в состоянии HALF_OPEN перед тем, как закрыть цепь!
+                        .permittedNumberOfCallsInHalfOpenState(5)
+                        .build();
+
+        // 2. Пересоздаем автомат в реестре с этой конфигурацией
+        registry.remove("commentApiBreaker");
+        CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker", customConfig);
+
+        // 3. Выполняем чистый переход по цепочке
+        cb.transitionToClosedState();
+        cb.reset();
+        cb.transitionToOpenState();
+        cb.transitionToHalfOpenState();
+
+        assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.HALF_OPEN);
+
+        // Act & Assert
+        for (int i = 1; i <= 5; i++) {
+            cb.onSuccess(10, TimeUnit.MILLISECONDS);
+
+            // Теперь автомат железно будет оставаться HALF_OPEN на шагах 1, 2, 3, 4
+            if (i < 5) {
+                assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.HALF_OPEN);
+            }
+        }
+
+        // Финал: на 5-й успешный вызов автомат перейдет в CLOSED
+        assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
     }
 }

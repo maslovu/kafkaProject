@@ -37,7 +37,8 @@ public class ExternalApiSender implements CommentSender {
     public CompletableFuture<Void> sendFallback(List<CommentEvent> batch, Throwable t) {
         log.error("Fallback triggered. Причина:", t);
         saveToDeadLetterQueue(batch);
-        return CompletableFuture.completedFuture(null); }
+        return CompletableFuture.completedFuture(null);
+    }
 
     public void saveToDeadLetterQueue(List<CommentEvent> batch) {
         // Логика резервного сохранения (например, запись в файл, в БД otus или в специальный топик-ошибок comments-dlq)

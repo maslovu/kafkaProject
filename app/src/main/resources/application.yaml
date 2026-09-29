@@ -99,6 +99,7 @@ resilience4j:
           - "java.net.ConnectException"
           - "java.net.SocketTimeoutException"
           - "org.springframework.web.client.ResourceAccessException"
+          - "java.lang.RuntimeException"
         ignore-exceptions:
           - "feign.FeignException$NotFound" # 404
           - "feign.FeignException$Unauthorized" # 401
