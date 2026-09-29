@@ -20,8 +20,8 @@ public class ExternalApiSender implements CommentSender {
 
     private final CommentClient commentClient;
 
-    @Retry(name = "commentApiRetry", fallbackMethod = "sendFallback")
-    @CircuitBreaker(name = "commentApiBreaker")
+    @CircuitBreaker(name = "commentApiBreaker", fallbackMethod = "sendFallback")
+    @Retry(name = "commentApiRetry")
     @Bulkhead(name = "commentApiBulkhead", type = Bulkhead.Type.SEMAPHORE)
     @TimeLimiter(name = "commentApiLimiter")
     @Override

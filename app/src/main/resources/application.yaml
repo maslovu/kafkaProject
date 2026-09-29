@@ -69,6 +69,7 @@ resilience4j:
         max-wait-duration: 10ms
 
   circuitbreaker:
+    circuitBreakerAspectOrder: 1
     instances:
       commentApiBreaker: # Имя нашего выключателя
         registerHealthIndicator: true
@@ -82,16 +83,26 @@ resilience4j:
         automatic-transition-from-open-to-half-open-enabled: true
 
   retry:
+    retryAspectOrder: 2
     instances:
       commentApiRetry:
         max-attempts: 3            # Количество попыток
         wait-duration: 200ms      # Пауза между попытками (0,2 секунды)
-        wait-duration-multiplier: 2.0 # Умножаем паузу: 500 -> 1000 -> 2000
-        retryExceptions:
-          - feign.FeignException  # На какие ошибки реагировать
-          - java.net.ConnectException
-          - java.net.SocketTimeoutException
-          - org.springframework.web.client.ResourceAccessException
+        enable-exponential-backoff: true # ВКЛЮЧАЕТ работу мультипликатора (200ms -> 400ms -> 800ms)
+        exponential-backoff-multiplier: 2.0 # Правильное имя параметра для множителя в Resilience4j
+        randomized-wait-factor: 0.5 # Добавляет "дрожание" (jitter)
+        retry-exceptions:
+          - "feign.FeignException$InternalServerError" # 5xx
+          - "feign.FeignException$BadGateway" # 502
+          - "feign.FeignException$ServiceUnavailable" # 503
+          - "feign.FeignException$GatewayTimeout" # 504
+          - "java.net.ConnectException"
+          - "java.net.SocketTimeoutException"
+          - "org.springframework.web.client.ResourceAccessException"
+        ignore-exceptions:
+          - "feign.FeignException$NotFound" # 404
+          - "feign.FeignException$Unauthorized" # 401
+          - "feign.FeignException$BadRequest" # 400
 
   timelimiter:
     instances:
