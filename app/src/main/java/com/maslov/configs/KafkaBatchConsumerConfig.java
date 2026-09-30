@@ -1,6 +1,7 @@
 package com.maslov.configs;
 
 import com.maslov.dto.CommentEvent;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -103,5 +105,13 @@ public class KafkaBatchConsumerConfig {
         ErrorHandlingDeserializer<CommentEvent> errorHandlingDeserializer =
                 new ErrorHandlingDeserializer<>(jsonDeserializer);
         return jsonDeserializer;
+    }
+
+    @Bean
+    public NewTopic commentsTopic() {
+        return TopicBuilder.name("comments-topic")
+                .partitions(3) // Явно говорим создать 3 партиции под concurrency = 3
+                .replicas(1)   // Для локальной разработки или теста (в прод обычно ставят 3)
+                .build();
     }
 }
