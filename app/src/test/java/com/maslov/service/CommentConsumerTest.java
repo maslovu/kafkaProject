@@ -1,6 +1,7 @@
 package com.maslov.service;
 
 import com.maslov.dto.CommentEvent;
+import io.micrometer.core.instrument.Counter;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,16 +9,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.listener.BatchListenerFailedException;
+import org.springframework.kafka.core.KafkaTemplate;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -28,6 +33,12 @@ class CommentConsumerTest {
 
     @Mock
     private ExternalApiSender sender; // Мокаем наш сервис отправки
+
+    @Mock
+    private Counter dlqMessagesCounter;
+
+    @Mock
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @InjectMocks
     private CommentConsumerService kafkaListener; // Имя вашего класса, где находится @KafkaListener
@@ -65,25 +76,39 @@ class CommentConsumerTest {
     }
 
     @Test
-    void shouldThrowBatchListenerFailedException_WhenRecordValueThrowsException() {
+    void shouldProcessValidRecordsAndIsolateFailedRecordsToDlt_WhenRecordValueThrowsException() {
         // Arrange
+        CommentEvent validEvent1 = new CommentEvent(1L, "Valid comment");
+        CommentEvent validEvent2 = new CommentEvent(2L, "Error comment");
+
         ConsumerRecord<String, CommentEvent> record1 = new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
 
-        // Симулируем «битую» запись, которая при вызове .value() бросает ошибку (например, сбой десериализации)
+        // Симулируем «битую» запись, которая бросает ошибку при вызове .value()
         ConsumerRecord<String, CommentEvent> spyRecord2 = spy(new ConsumerRecord<>("topic", 0, 1L, "key2", validEvent2));
         doThrow(new RuntimeException("Deserialization error")).when(spyRecord2).value();
 
         List<ConsumerRecord<String, CommentEvent>> batch = List.of(record1, spyRecord2);
 
-        // Act & Assert
-        // Метод должен упасть на 2-м элементе (индекс 1) и выбросить BatchListenerFailedException
-        assertThatThrownBy(() -> kafkaListener.listenInBatch(batch))
-                .isInstanceOf(BatchListenerFailedException.class)
-                .hasMessageContaining("Error processing record in batch")
-                .hasFieldOrPropertyWithValue("index", 1); // Проверяем, что Spring Kafka получит правильный индекс ошибки!
+        // Создаем дефолтные выполненные фьючи для заглушек
+        java.util.concurrent.CompletableFuture<?> completedFuture =
+                java.util.concurrent.CompletableFuture.completedFuture(null);
 
-        // Так как метод упал в цикле, до отправки дело вообще не должно дойти
-        verify(sender, never()).send(anyList());
+        // Используем doReturn — он пропустит любые несовпадения типов CompletableFuture в generics
+        doReturn(completedFuture).when(kafkaTemplate).send(anyString(), any(), any());
+        doReturn(completedFuture).when(sender).send(anyList());
+
+        // Act
+        kafkaListener.listenInBatch(batch);
+
+        // Assert
+        // 1. Проверяем, что счетчик метрик БЫЛ вызван ровно 1 раз для сбойной записи
+        verify(dlqMessagesCounter, times(1)).increment();
+
+        // 2. Проверяем, что сбойная запись была отправлена в DLT руками через kafkaTemplate
+        verify(kafkaTemplate, times(1)).send(eq("topic.DLT"), eq("key2"), any());
+
+        // 3. Проверяем, что валидная запись (record1) успешно ушла в бизнес-логику отправителя
+        verify(sender, times(1)).send(argThat(list -> list.size() == 1 && list.contains(validEvent1)));
     }
 
     @Test

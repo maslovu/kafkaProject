@@ -19,7 +19,7 @@ public class KafkaDltConsumerService {
     @KafkaListener(
             topics = "comments-topic.DLT", // Имя формируется по маске <исходный_топик>.DLT
             groupId = "comment-dlt-group-id",
-            containerFactory = "kafkaListenerContainerFactory" // Используем СИНГЛ-фабрику (не батч!)
+            containerFactory = "singleFactory"
     )
     public void listenDlt(
             ConsumerRecord<String, CommentEvent> record,
@@ -29,7 +29,7 @@ public class KafkaDltConsumerService {
         String topic = originalTopic != null ? new String(originalTopic, StandardCharsets.UTF_8) : "unknown";
         String error = exceptionMessage != null ? new String(exceptionMessage, StandardCharsets.UTF_8) : "unknown";
 
-        log.error("DLT Event: Топик [{}], Ошибка [{}], Ключ [{}], Тело: {}",
+        log.error("DLT Event: Topic [{}], Error [{}], Key [{}], Body: {}",
                 topic, error, record.key(), record.value());
 
         try {
@@ -39,12 +39,12 @@ public class KafkaDltConsumerService {
             // ВАЖНО: Перехватываем ВСЕ ошибки.
             // Консьюмер DLT ни в коем случае не должен выбрасывать исключение наверх,
             // иначе мы уйдем в бесконечный цикл обработки этой же битой записи.
-            log.error("Критическая ошибка при попытке залогировать DLT-сообщение!", e);
+            log.error("Critical error while attempting to log a DLT message", e);
         }
     }
 
     private void saveToAuditLog(CommentEvent event, String error, String originalTopic) {
         // Здесь может быть репозиторий для сохранения в Postgres (например, в таблицу broken_events)
-        log.info("Сообщение успешно сохранено в аудит-лог базы данных для ручного разбора.");
+        log.info("The message has been successfully saved to the database audit log for manual analysis");
     }
 }

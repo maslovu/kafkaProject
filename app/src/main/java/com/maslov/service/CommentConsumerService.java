@@ -1,10 +1,11 @@
 package com.maslov.service;
 
 import com.maslov.dto.CommentEvent;
+import io.micrometer.core.instrument.Counter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.listener.BatchListenerFailedException;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -14,10 +15,19 @@ import java.util.List;
 @Service
 public class CommentConsumerService {
 
+    private final Counter dlqMessagesCounter;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+
     private final ExternalApiSender sender;
 
-    public CommentConsumerService(ExternalApiSender sender) {
+    public CommentConsumerService(
+            ExternalApiSender sender,
+            Counter dlqMessagesCounter,
+            KafkaTemplate<String, Object> kafkaTemplate
+    ) {
         this.sender = sender;
+        this.dlqMessagesCounter = dlqMessagesCounter;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     @KafkaListener(
@@ -33,15 +43,20 @@ public class CommentConsumerService {
 
         for (int i = 0; i < batch.size(); i++) {
             ConsumerRecord<String, CommentEvent> record = batch.get(i);
+            CommentEvent event = null;
             try {
                 // Бизнес-логика обработки конкретного сообщения
-                events.add(record.value());
+                event = record.value();
+                events.add(event);
             } catch (Exception e ) {
-                log.error("Ошибка при обработке сообщения на индексе {}", i, e);
+                log.error("Error processing message at index {}", i, e);
 
-                // ВАЖНО: Выбрасываем BatchListenerFailedException, передавая исключение и индекс элемента!
-                // Spring зафиксирует это, отправит в DLT только ЭТОТ элемент, а остальные пропустит
-                throw new BatchListenerFailedException("Error processing record in batch", e, i);
+                // 1. Увеличиваем счетчик ВРУЧНУЮ прямо в момент перехвата
+                dlqMessagesCounter.increment();
+
+                String dltTopic = record.topic() + ".DLT"; // Получится comments-topic.DLT
+                kafkaTemplate.send(dltTopic, record.key(), event);
+                log.info("The message with key {} has been successfully isolated into DLT topic {}", record.key(), dltTopic);
             }
         }
 
