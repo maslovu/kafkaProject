@@ -19,7 +19,7 @@ public class KafkaDltConsumerService {
     @KafkaListener(
             topics = "comments-topic.DLT", // Имя формируется по маске <исходный_топик>.DLT
             groupId = "comment-dlt-group-id",
-            containerFactory = "kafkaListenerContainerFactory" // Используем СИНГЛ-фабрику (не батч!)
+            containerFactory = "singleFactory"
     )
     public void listenDlt(
             ConsumerRecord<String, CommentEvent> record,

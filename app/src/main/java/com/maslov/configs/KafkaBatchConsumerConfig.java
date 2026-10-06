@@ -1,6 +1,7 @@
 package com.maslov.configs;
 
 import com.maslov.dto.CommentEvent;
+import io.micrometer.core.instrument.Counter;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -16,12 +17,9 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
-import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
-import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
-import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -74,24 +72,23 @@ public class KafkaBatchConsumerConfig {
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> batchFactory(
             ConsumerFactory<String, CommentEvent> kafkaConsumerFactory,
-            KafkaTemplate<String, Object> kafkaTemplate) {
+            KafkaTemplate<String, Object> kafkaTemplate,
+            Counter dlqMessagesCounter) {
         ConcurrentKafkaListenerContainerFactory<String, CommentEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(kafkaConsumerFactory);
-        factory.setBatchListener(true);
+        factory.setBatchListener(true); // пакетный режим
 
-        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate);
+        return factory;
+    }
 
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
-                recoverer,
-                new FixedBackOff(1000L, 2L)
-        );
-
-        errorHandler.setAckAfterHandle(true);
-
-        factory.setCommonErrorHandler(errorHandler);
-
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> singleFactory(
+            ConsumerFactory<String, CommentEvent> kafkaConsumerFactory) {
+        ConcurrentKafkaListenerContainerFactory<String, CommentEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(kafkaConsumerFactory);
         return factory;
     }
 

@@ -55,6 +55,8 @@ management:
         include:
           - health
           - metrics
+          - info
+          - prometheus
           - resilience4j
           - circuitbreakers
   health:
