@@ -11,7 +11,7 @@ public class MetricsConfig {
     @Bean
     public Counter dlqMessagesCounter(MeterRegistry meterRegistry) {
         return Counter.builder("kafka.dlq.messages.count")
-                .description("Количество сообщений, отправленных в Kafka DLT")
+                .description("Number of messages sent to the Kafka DLT")
                 .tags("topic", "comments-topic.DLT")
                 .register(meterRegistry);
     }

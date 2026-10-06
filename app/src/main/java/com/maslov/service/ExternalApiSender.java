@@ -26,7 +26,7 @@ public class ExternalApiSender implements CommentSender {
     @TimeLimiter(name = "commentApiLimiter")
     @Override
     public CompletableFuture<Void> send(List<CommentEvent> batch) {
-        log.info("Попытка отправки пакета размером {}...", batch.size());
+        log.info("Attempting to send a packet of size {}...", batch.size());
 
         return CompletableFuture.supplyAsync(() -> {
             commentClient.sendCommentsBatch(batch);
@@ -35,13 +35,13 @@ public class ExternalApiSender implements CommentSender {
     }
 
     public CompletableFuture<Void> sendFallback(List<CommentEvent> batch, Throwable t) {
-        log.error("Fallback triggered. Причина:", t);
+        log.error("Fallback triggered. Cause:", t);
         saveToDeadLetterQueue(batch);
         return CompletableFuture.completedFuture(null);
     }
 
     public void saveToDeadLetterQueue(List<CommentEvent> batch) {
         // Логика резервного сохранения (например, запись в файл, в БД otus или в специальный топик-ошибок comments-dlq)
-        log.info("Резервное сохранение {} элементов завершено.", batch.size());
+        log.info("Backup of {} elements completed", batch.size());
     }
 }

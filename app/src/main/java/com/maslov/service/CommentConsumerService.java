@@ -49,14 +49,14 @@ public class CommentConsumerService {
                 event = record.value();
                 events.add(event);
             } catch (Exception e ) {
-                log.error("Ошибка при обработке сообщения на индексе {}", i, e);
+                log.error("Error processing message at index {}", i, e);
 
                 // 1. Увеличиваем счетчик ВРУЧНУЮ прямо в момент перехвата
                 dlqMessagesCounter.increment();
 
                 String dltTopic = record.topic() + ".DLT"; // Получится comments-topic.DLT
                 kafkaTemplate.send(dltTopic, record.key(), event);
-                log.info("Сообщение с ключом {} успешно изолировано в DLT топик {}", record.key(), dltTopic);
+                log.info("The message with key {} has been successfully isolated into DLT topic {}", record.key(), dltTopic);
             }
         }
 
