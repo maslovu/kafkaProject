@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kafka-consumer-monitor
+  namespace: monitoring # Namespace, где работает Prometheus Operator
+  labels:
+    release: monitoring # Должно совпадать с selector.matchLabels вашего Prometheus
+spec:
+  namespaceSelector:
+    any: true # Искать сервисы во всех namespace
+  selector:
+    matchLabels:
+      app: kafka-consumer # Метка, которая стоит на Service вашего Kafka Consumer
+  endpoints:
+    - port: http-management # Имя порта в Service
+      path: /actuator/prometheus
+      interval: 15s
+      scheme: http # Явно указываем протокол (http или https)
