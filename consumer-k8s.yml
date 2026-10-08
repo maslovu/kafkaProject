@@ -5,7 +5,7 @@ metadata:
   labels:
     app: kafka-consumer
 spec:
-  replicas: 1 # Для начала запускаем одну копию слушателя
+  replicas: 1
   selector:
     matchLabels:
       app: kafka-consumer
@@ -13,12 +13,43 @@ spec:
     metadata:
       labels:
         app: kafka-consumer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8082"
     spec:
       containers:
         - name: kafka-consumer-container
           image: kafka-consumer-app:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-business
+              containerPort: 8081
+              protocol: TCP
+            - name: http-management
+              containerPort: 8082
+              protocol: TCP
           env:
-            # Направляем консьюмер на работающий в кластере брокер Kafka
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
               value: "kafka-service:9092"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-consumer-service
+  labels:
+    app: kafka-consumer
+spec:
+  type: ClusterIP
+  selector:
+    app: kafka-consumer
+  ports:
+    - name: http-business
+      protocol: TCP
+      port: 8081
+      targetPort: http-business
+    - name: http-management
+      protocol: TCP
+      port: 8082
+      targetPort: http-management
