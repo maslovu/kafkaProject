@@ -13,12 +13,47 @@ spec:
     metadata:
       labels:
         app: kafka-consumer
+      # Аннотации для автоматического сбора метрик Prometheus внутри кластера
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8082"
     spec:
       containers:
         - name: kafka-consumer-container
           image: kafka-consumer-app:latest
           imagePullPolicy: IfNotPresent
+          # Явно объявляем порты контейнера для порядка
+          ports:
+              - name: http-business
+                containerPort: 8081
+              - name: http-actuator
+                containerPort: 8082
           env:
             # Направляем консьюмер на работающий в кластере брокер Kafka
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
               value: "kafka-service:9092"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-consumer-service
+spec:
+  type: NodePort # Используем NodePort для внешнего доступа
+  selector:
+    app: kafka-consumer
+  ports:
+    # 1. Бизнес-логика (Шлюз будет обращаться сюда внутри кластера по порту 8081)
+    - name: http-business
+      protocol: TCP
+      port: 8081
+      targetPort: 8081
+      # nodePort ЗДЕСЬ НЕ ПИШЕМ! Это закроет прямой доступ к 8081 снаружи.
+
+    # 2. Метрики / Актуатор (Будет доступен СНАРУЖИ кластера)
+    - name: http-management
+      protocol: TCP
+      port: 8082
+      targetPort: 8082
+      nodePort: 30082
