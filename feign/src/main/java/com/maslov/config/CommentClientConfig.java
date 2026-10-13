@@ -6,8 +6,13 @@ import feign.codec.ErrorDecoder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+
+import javax.net.ssl.SSLContext;
+import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.Executor;
 
 @Configuration
 @RequiredArgsConstructor
@@ -44,8 +49,12 @@ public class CommentClientConfig {
     // 3. Таймауты (Критично для стабильности подов в K8s)
     @Bean
     public Client client() {
-        return new Client.Default(null, null) {
-        };
+        try {
+            SSLContext sslContext = SSLContext.getDefault();
+            return new Client.Default(sslContext.getSocketFactory(), null);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("Failed to initialize Feign client with default SSL context", e);
+        }
     }
 
     // Выделяем отдельный пул под внешние HTTP-вызовы, чтобы не занимать потоки Tomcat
@@ -55,5 +64,15 @@ public class CommentClientConfig {
                 50, // количество потоков
                 60, // TTL нити в секундах
                 "http-scheduler");
+    }
+
+    @Bean("httpExecutor")
+    public Executor httpExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(50);
+        executor.setMaxPoolSize(50);
+        executor.setThreadNamePrefix("http-scheduler-");
+        executor.initialize();
+        return executor;
     }
 }

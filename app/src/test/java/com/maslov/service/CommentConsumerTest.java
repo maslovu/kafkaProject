@@ -14,7 +14,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 
@@ -23,6 +22,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -73,6 +73,8 @@ class CommentConsumerTest {
 
         // Assert
         verify(sender, times(1)).send(List.of(validEvent1, validEvent2));
+        verify(dlqMessagesCounter, never()).increment();
+        verify(kafkaTemplate, never()).send(anyString(), any(), any());
     }
 
     @Test

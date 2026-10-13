@@ -42,25 +42,33 @@ public class CommentConsumerService {
         List<CommentEvent> events = new ArrayList<>();
 
         for (int i = 0; i < batch.size(); i++) {
-            ConsumerRecord<String, CommentEvent> record = batch.get(i);
-            CommentEvent event = null;
-            try {
-                // Бизнес-логика обработки конкретного сообщения
-                event = record.value();
+            var event = processRecord(batch, i);
+            if (event != null) {
                 events.add(event);
-            } catch (Exception e ) {
-                log.error("Error processing message at index {}", i, e);
-
-                // 1. Увеличиваем счетчик ВРУЧНУЮ прямо в момент перехвата
-                dlqMessagesCounter.increment();
-
-                String dltTopic = record.topic() + ".DLT"; // Получится comments-topic.DLT
-                kafkaTemplate.send(dltTopic, record.key(), event);
-                log.info("The message with key {} has been successfully isolated into DLT topic {}", record.key(), dltTopic);
             }
         }
 
         // Отправляем батч и ЖДЕМ результата
+        sendBatch(events, batch.getFirst().topic());
+    }
+
+    private CommentEvent processRecord(List<ConsumerRecord<String, CommentEvent>> batch, int index) {
+        ConsumerRecord<String, CommentEvent> record = batch.get(index);
+        try {
+            // Бизнес-логика обработки конкретного сообщения
+            return record.value();
+        } catch (Exception e) {
+            log.error("Error processing message at index {}", index, e);
+
+            // 1. Увеличиваем счетчик ВРУЧНУЮ прямо в момент перехвата
+            dlqMessagesCounter.increment();
+
+            sendToDlt(record.topic(), record.key(), null);
+        }
+        return null;
+    }
+
+    private void sendBatch(List<CommentEvent> events, String topic) {
         if (!events.isEmpty()) {
             try {
                 // Используем .join() или .get(), чтобы сделать вызов синхронным для потока Kafka
@@ -74,19 +82,26 @@ public class CommentConsumerService {
                 // отправляем весь этот батч в DLT поштучно, так как sender его не принял
                 for (CommentEvent event : events) {
                     try {
-                        // Используем имя топика (можно захардкодить или вытащить из первого record)
-                        String dltTopic = "comments-topic.DLT";
-
                         // В качестве ключа можно генерировать UUID или использовать id объекта, если он есть
                         String fallbackKey = event.getBookId() != null ? event.getBookId().toString() : "global-err";
 
-                        kafkaTemplate.send(dltTopic, fallbackKey, event);
+                        sendToDlt(topic, fallbackKey, event);
                     } catch (Exception dltEx) {
                         log.error("Критическая ошибка при попытке эвакуации сообщения в DLT: {}", event, dltEx);
                     }
                 }
                 log.warn("Батч размером {} успешно эвакуирован в DLT из-за падения сендера.", events.size());
             }
+        }
+    }
+
+    private void sendToDlt(String topic, String key, CommentEvent event) {
+        String dltTopic = topic + ".DLT";
+        try {
+            kafkaTemplate.send(dltTopic, key, event);
+            log.info("Message with key {} isolated into DLT topic {}", key, dltTopic);
+        } catch (Exception dltEx) {
+            log.info("The message with key {} has been successfully isolated into DLT topic {}", key, dltTopic);
         }
     }
 }

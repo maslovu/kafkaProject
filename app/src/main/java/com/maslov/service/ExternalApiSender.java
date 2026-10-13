@@ -8,10 +8,12 @@ import io.github.resilience4j.retry.annotation.Retry;
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 public class ExternalApiSender implements CommentSender {
 
     private final CommentClient commentClient;
+    private final Executor httpExecutor;
 
     @CircuitBreaker(name = "commentApiBreaker", fallbackMethod = "sendFallback")
     @Retry(name = "commentApiRetry")
@@ -29,9 +32,10 @@ public class ExternalApiSender implements CommentSender {
         log.info("Attempting to send a packet of size {}...", batch.size());
 
         return CompletableFuture.supplyAsync(() -> {
-            commentClient.sendCommentsBatch(batch);
+            ResponseEntity<Void> response = commentClient.sendCommentsBatch(batch);
+            log.debug("Batch send response status: {}", response.getStatusCode());
             return null;
-        });
+        }, httpExecutor);
     }
 
     public CompletableFuture<Void> sendFallback(List<CommentEvent> batch, Throwable t) {

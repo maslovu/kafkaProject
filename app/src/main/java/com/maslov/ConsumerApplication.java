@@ -5,9 +5,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.kafka.annotation.EnableKafka;
 
-@SpringBootApplication(scanBasePackages = "com.maslov")
-@EnableFeignClients(basePackages = "com.maslov")
-@EnableKafka
+@SpringBootApplication
+@EnableFeignClients
 public class ConsumerApplication {
     public static void main(String[] args) {
 

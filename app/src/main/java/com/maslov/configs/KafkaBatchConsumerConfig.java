@@ -30,6 +30,9 @@ public class KafkaBatchConsumerConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String servers;
 
+    @Value("${kafka.trusted-packages:com.maslov.dto}")
+    private static String trustedPackages;
+
     // Свойства Продюсера (для KafkaTemplate)
     @Bean
     public Map<String, Object> producerConfigs() {
@@ -56,10 +59,10 @@ public class KafkaBatchConsumerConfig {
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
         props.put(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, 5000);
         props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 50);
-        props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 5000);
+        props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 30000);
 
         //Настраиваем безопасность пакетов JSON
-        JsonDeserializer<CommentEvent> jsonDeserializer = getObjectJsonDeserializer();
+        ErrorHandlingDeserializer<CommentEvent> jsonDeserializer = getObjectJsonDeserializer();
 
         //Явно передаем StringDeserializer и настроенный JsonDeserializer в фабрику
         return new DefaultKafkaConsumerFactory<>(
@@ -92,16 +95,14 @@ public class KafkaBatchConsumerConfig {
         return factory;
     }
 
-    private static JsonDeserializer<CommentEvent> getObjectJsonDeserializer() {
+    private static ErrorHandlingDeserializer<CommentEvent> getObjectJsonDeserializer() {
         JsonDeserializer<CommentEvent> jsonDeserializer = new JsonDeserializer<>(CommentEvent.class);
-        jsonDeserializer.addTrustedPackages("*"); // Доверяем всем пакетам
+        jsonDeserializer.addTrustedPackages(trustedPackages); // Доверяем всем пакетам
         jsonDeserializer.setUseTypeHeaders(false); // Игнорируем заголовки типов продюсера
 
         // Оборачиваем его в ErrorHandlingDeserializer
         // Это защитит консьюмер от падения при встрече с битым JSON
-        ErrorHandlingDeserializer<CommentEvent> errorHandlingDeserializer =
-                new ErrorHandlingDeserializer<>(jsonDeserializer);
-        return jsonDeserializer;
+        return new ErrorHandlingDeserializer<>(jsonDeserializer);
     }
 
     @Bean
