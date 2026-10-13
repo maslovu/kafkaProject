@@ -18,14 +18,14 @@ import java.util.concurrent.CompletableFuture;
 public class CommentConsumerService {
 
     private final Counter dlqMessagesCounter;
-    private final KafkaTemplate<String, CommentEvent> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     private final ExternalApiSender sender;
 
     public CommentConsumerService(
             ExternalApiSender sender,
             Counter dlqMessagesCounter,
-            KafkaTemplate<String, CommentEvent> kafkaTemplate
+            KafkaTemplate<String, Object> kafkaTemplate
     ) {
         this.sender = sender;
         this.dlqMessagesCounter = dlqMessagesCounter;
@@ -96,7 +96,7 @@ public class CommentConsumerService {
 
     private void sendToDlt(String topic, String key, CommentEvent event) {
         String dltTopic = topic + ".DLT";
-        CompletableFuture<SendResult<String, CommentEvent>> future = kafkaTemplate.send(dltTopic, key, event);
+        CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(dltTopic, key, event);
         future.whenComplete((result, ex) -> {
             if (ex != null) {
                 // Ошибка
