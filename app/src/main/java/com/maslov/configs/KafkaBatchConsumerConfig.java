@@ -94,8 +94,8 @@ public class KafkaBatchConsumerConfig {
 
     private static JsonDeserializer<CommentEvent> getObjectJsonDeserializer() {
         JsonDeserializer<CommentEvent> jsonDeserializer = new JsonDeserializer<>(CommentEvent.class);
-        jsonDeserializer.addTrustedPackages("*"); // Доверяем всем пакетам [70.1]
-        jsonDeserializer.setUseTypeHeaders(false); // Игнорируем заголовки типов продюсера [70.1]
+        jsonDeserializer.addTrustedPackages("*"); // Доверяем всем пакетам
+        jsonDeserializer.setUseTypeHeaders(false); // Игнорируем заголовки типов продюсера
 
         // Оборачиваем его в ErrorHandlingDeserializer
         // Это защитит консьюмер от падения при встрече с битым JSON
@@ -107,8 +107,8 @@ public class KafkaBatchConsumerConfig {
     @Bean
     public NewTopic commentsTopic() {
         return TopicBuilder.name("comments-topic")
-                .partitions(3) // Явно говорим создать 3 партиции под concurrency = 3
-                .replicas(1)   // Для локальной разработки или теста (в прод обычно ставят 3)
+                .partitions(3) // Явно говорим создать 3 партиции под concurrency
+                .replicas(1)   // Для локальной разработки или теста
                 .build();
     }
 }

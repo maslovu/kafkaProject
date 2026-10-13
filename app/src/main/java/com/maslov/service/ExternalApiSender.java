@@ -41,7 +41,7 @@ public class ExternalApiSender implements CommentSender {
     }
 
     public void saveToDeadLetterQueue(List<CommentEvent> batch) {
-        // Логика резервного сохранения (например, запись в файл, в БД otus или в специальный топик-ошибок comments-dlq)
+        // Логика резервного сохранения (например, запись в файл, в БД otus или в специальный топик-ошибок comments-topic.DLT)
         log.info("Backup of {} elements completed", batch.size());
     }
 }

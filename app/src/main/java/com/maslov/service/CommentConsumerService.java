@@ -65,15 +65,27 @@ public class CommentConsumerService {
             try {
                 // Используем .join() или .get(), чтобы сделать вызов синхронным для потока Kafka
                 sender.send(events).join();
-
-                log.info("Package sends successfully");
+                log.info("Package sends successfully. Size: {}", events.size());
             } catch (Exception e) {
-                log.error("Global error when sending a batch via the sender", e);
+                log.error("Global error when sending a batch via the sender. Sending clean batch to DLT.", e);
 
-                // Пробрасываем ошибку дальше.
-                // Если в sender.send() НЕ отработал локальный fallback,
-                // то DefaultErrorHandler перехватит эту ошибку и отправит ВЕСЬ этот батч в Kafka DLT
-                throw e;
+                dlqMessagesCounter.increment(events.size());
+
+                // отправляем весь этот батч в DLT поштучно, так как sender его не принял
+                for (CommentEvent event : events) {
+                    try {
+                        // Используем имя топика (можно захардкодить или вытащить из первого record)
+                        String dltTopic = "comments-topic.DLT";
+
+                        // В качестве ключа можно генерировать UUID или использовать id объекта, если он есть
+                        String fallbackKey = event.getBookId() != null ? event.getBookId().toString() : "global-err";
+
+                        kafkaTemplate.send(dltTopic, fallbackKey, event);
+                    } catch (Exception dltEx) {
+                        log.error("Критическая ошибка при попытке эвакуации сообщения в DLT: {}", event, dltEx);
+                    }
+                }
+                log.warn("Батч размером {} успешно эвакуирован в DLT из-за падения сендера.", events.size());
             }
         }
     }

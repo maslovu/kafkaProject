@@ -17,7 +17,7 @@ public class KafkaDltConsumerService {
     private static final Logger log = LoggerFactory.getLogger(KafkaDltConsumerService.class);
 
     @KafkaListener(
-            topics = "comments-topic.DLT", // Имя формируется по маске <исходный_топик>.DLT
+            topics = "comments-topic.DLT",
             groupId = "comment-dlt-group-id",
             containerFactory = "singleFactory"
     )
