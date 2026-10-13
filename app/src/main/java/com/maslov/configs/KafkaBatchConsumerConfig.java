@@ -1,7 +1,6 @@
 package com.maslov.configs;
 
 import com.maslov.dto.CommentEvent;
-import io.micrometer.core.instrument.Counter;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -31,7 +30,7 @@ public class KafkaBatchConsumerConfig {
     private String servers;
 
     @Value("${kafka.trusted-packages:com.maslov.dto}")
-    private static String trustedPackages;
+    private String trustedPackages;
 
     // Свойства Продюсера (для KafkaTemplate)
     @Bean
@@ -59,7 +58,7 @@ public class KafkaBatchConsumerConfig {
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
         props.put(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, 5000);
         props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 50);
-        props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 30000);
+        props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 300000);
 
         //Настраиваем безопасность пакетов JSON
         ErrorHandlingDeserializer<CommentEvent> jsonDeserializer = getObjectJsonDeserializer();
@@ -74,9 +73,7 @@ public class KafkaBatchConsumerConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> batchFactory(
-            ConsumerFactory<String, CommentEvent> kafkaConsumerFactory,
-            KafkaTemplate<String, Object> kafkaTemplate,
-            Counter dlqMessagesCounter) {
+            ConsumerFactory<String, CommentEvent> kafkaConsumerFactory) {
         ConcurrentKafkaListenerContainerFactory<String, CommentEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
@@ -95,9 +92,9 @@ public class KafkaBatchConsumerConfig {
         return factory;
     }
 
-    private static ErrorHandlingDeserializer<CommentEvent> getObjectJsonDeserializer() {
+    private ErrorHandlingDeserializer<CommentEvent> getObjectJsonDeserializer() {
         JsonDeserializer<CommentEvent> jsonDeserializer = new JsonDeserializer<>(CommentEvent.class);
-        jsonDeserializer.addTrustedPackages(trustedPackages); // Доверяем всем пакетам
+        jsonDeserializer.addTrustedPackages(trustedPackages);
         jsonDeserializer.setUseTypeHeaders(false); // Игнорируем заголовки типов продюсера
 
         // Оборачиваем его в ErrorHandlingDeserializer

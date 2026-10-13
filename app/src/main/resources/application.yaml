@@ -108,6 +108,7 @@ resilience4j:
           - "feign.FeignException$NotFound" # 404
           - "feign.FeignException$Unauthorized" # 401
           - "feign.FeignException$BadRequest" # 400
+          - "feign.FeignException.Forbidden" # Игнорируем 403
 
   timelimiter:
     instances:

@@ -6,8 +6,8 @@ import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -16,12 +16,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class ExternalApiSender implements CommentSender {
 
     private final CommentClient commentClient;
     private final Executor httpExecutor;
+
+    public ExternalApiSender(CommentClient commentClient,
+                             @Qualifier("httpExecutor") Executor httpExecutor) {
+        this.commentClient = commentClient;
+        this.httpExecutor = httpExecutor;
+    }
 
     @CircuitBreaker(name = "commentApiBreaker", fallbackMethod = "sendFallback")
     @Retry(name = "commentApiRetry")
