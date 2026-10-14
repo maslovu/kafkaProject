@@ -3,6 +3,7 @@ package com.maslov.service;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.maslov.dto.CommentEvent;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,7 @@ import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -129,7 +131,6 @@ class ExternalApiSenderTest {
     @DirtiesContext
     void shouldOpenCircuitBreakerAfterMultipleFailuresTest() throws Exception {
         // Arrange
-        // Симулируем жесткую ошибку бэкенда
         // Получаем автомат напрямую
         CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker");
 
@@ -138,7 +139,7 @@ class ExternalApiSenderTest {
         assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.OPEN);
 
         // Очищаем счетчики вызовов mock-объекта (spy) перед проверочным вызовом
-        org.mockito.Mockito.clearInvocations(sender);
+        clearInvocations(sender);
 
         List<CommentEvent> batch = List.of(event);
 
@@ -161,12 +162,11 @@ class ExternalApiSenderTest {
     @DirtiesContext
     void shouldTransitionFromHalfOpenToClosedAfterSuccessfulCallsTest() throws Exception {
         // Arrange
-        // 1. Создаем кастомную конфигурацию для теста, где жестко фиксируем размер окна в Half-Open
-        io.github.resilience4j.circuitbreaker.CircuitBreakerConfig customConfig =
-                io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.custom()
+        // 1. Создаем кастомную конфигурацию для теста, где фиксируем размер окна в Half-Open
+        CircuitBreakerConfig customConfig = CircuitBreakerConfig.custom()
                         .failureRateThreshold(50)
                         .slidingWindowSize(20)
-                        // ЖЕСТКО ГОВОРИМ: Ждать минимум 5 вызовов в состоянии HALF_OPEN перед тем, как закрыть цепь!
+                        // говорим ждать минимум 5 вызовов в состоянии HALF_OPEN перед тем, как закрыть цепь
                         .permittedNumberOfCallsInHalfOpenState(5)
                         .build();
 

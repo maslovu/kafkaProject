@@ -6,10 +6,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -42,39 +44,69 @@ public class CommentConsumerService {
         List<CommentEvent> events = new ArrayList<>();
 
         for (int i = 0; i < batch.size(); i++) {
-            ConsumerRecord<String, CommentEvent> record = batch.get(i);
-            CommentEvent event = null;
-            try {
-                // Бизнес-логика обработки конкретного сообщения
-                event = record.value();
+            var event = processRecord(batch.get(i), i);
+            if (event != null) {
                 events.add(event);
-            } catch (Exception e ) {
-                log.error("Error processing message at index {}", i, e);
-
-                // 1. Увеличиваем счетчик ВРУЧНУЮ прямо в момент перехвата
-                dlqMessagesCounter.increment();
-
-                String dltTopic = record.topic() + ".DLT"; // Получится comments-topic.DLT
-                kafkaTemplate.send(dltTopic, record.key(), event);
-                log.info("The message with key {} has been successfully isolated into DLT topic {}", record.key(), dltTopic);
             }
         }
 
         // Отправляем батч и ЖДЕМ результата
-        if (!events.isEmpty()) {
-            try {
-                // Используем .join() или .get(), чтобы сделать вызов синхронным для потока Kafka
-                sender.send(events).join();
+        sendBatch(events, batch.getFirst().topic());
+    }
 
-                log.info("Package sends successfully");
-            } catch (Exception e) {
-                log.error("Global error when sending a batch via the sender", e);
+    private CommentEvent processRecord(ConsumerRecord<String, CommentEvent> record, int index) {
+        try {
+            // Бизнес-логика обработки конкретного сообщения
+            return record.value();
+        } catch (Exception e) {
+            log.error("Error processing message at index {}", index, e);
 
-                // Пробрасываем ошибку дальше.
-                // Если в sender.send() НЕ отработал локальный fallback,
-                // то DefaultErrorHandler перехватит эту ошибку и отправит ВЕСЬ этот батч в Kafka DLT
-                throw e;
-            }
+            // 1. Увеличиваем счетчик ВРУЧНУЮ прямо в момент перехвата
+            dlqMessagesCounter.increment();
+
+            sendToDlt(record.topic(), record.key(), null);
         }
+        return null;
+    }
+
+    private void sendBatch(List<CommentEvent> events, String topic) {
+        try {
+            // Используем .join() или .get(), чтобы сделать вызов синхронным для потока Kafka
+            sender.send(events).join();
+            log.info("Package sends successfully. Size: {}", events.size());
+        } catch (Exception e) {
+            log.error("Global error when sending a batch via the sender. Sending clean batch to DLT.", e);
+
+            dlqMessagesCounter.increment(events.size());
+
+            // отправляем весь этот батч в DLT поштучно, так как sender его не принял
+            for (CommentEvent event : events) {
+                try {
+                    // В качестве ключа можно генерировать UUID или использовать id объекта, если он есть
+                    String fallbackKey = event.getBookId() != null ? event.getBookId().toString() : "global-err";
+
+                    sendToDlt(topic, fallbackKey, event);
+                } catch (Exception dltEx) {
+                    log.error("Критическая ошибка при попытке эвакуации сообщения в DLT: {}", event, dltEx);
+                }
+            }
+            log.warn("Батч размером {} успешно эвакуирован в DLT из-за падения сендера.", events.size());
+        }
+    }
+
+    private void sendToDlt(String topic, String key, CommentEvent event) {
+        String dltTopic = topic + ".DLT";
+        CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(dltTopic, key, event);
+        future.whenComplete((result, ex) -> {
+            if (ex != null) {
+                // Ошибка
+                log.error("Failed to send message with key {} to DLT topic {}: {}",
+                        key, dltTopic, ex.getMessage(), ex);
+            } else {
+                // Успех
+                log.info("Message with key {} isolated into DLT topic {} (Partition: {}, Offset: {})",
+                        key, dltTopic, result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
+            }
+        });
     }
 }

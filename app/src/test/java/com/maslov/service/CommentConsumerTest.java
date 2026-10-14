@@ -14,7 +14,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 
@@ -23,6 +22,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 class CommentConsumerTest {
 
     @Mock
-    private ExternalApiSender sender; // Мокаем наш сервис отправки
+    private ExternalApiSender sender;
 
     @Mock
     private Counter dlqMessagesCounter;
@@ -41,7 +41,7 @@ class CommentConsumerTest {
     private KafkaTemplate<String, Object> kafkaTemplate;
 
     @InjectMocks
-    private CommentConsumerService kafkaListener; // Имя вашего класса, где находится @KafkaListener
+    private CommentConsumerService kafkaListener;
 
     private CommentEvent validEvent1;
     private CommentEvent validEvent2;
@@ -60,19 +60,21 @@ class CommentConsumerTest {
     @Test
     void shouldProcessBatchSuccessfully_WhenAllRecordsAreValid() {
         // Arrange
-        ConsumerRecord<String, CommentEvent> record1 = new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
-        ConsumerRecord<String, CommentEvent> record2 = new ConsumerRecord<>("topic", 0, 1L, "key2", validEvent2);
+        ConsumerRecord<String, CommentEvent> record1 =
+                new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
+        ConsumerRecord<String, CommentEvent> record2 =
+                new ConsumerRecord<>("topic", 0, 1L, "key2", validEvent2);
         List<ConsumerRecord<String, CommentEvent>> batch = List.of(record1, record2);
 
-        // Настраиваем успешный асинхронный ответ от sender
         when(sender.send(anyList())).thenReturn(CompletableFuture.completedFuture(null));
 
         // Act
         kafkaListener.listenInBatch(batch);
 
         // Assert
-        // Проверяем, что sender вызван ровно 1 раз со списком из 2 элементов
         verify(sender, times(1)).send(List.of(validEvent1, validEvent2));
+        verify(dlqMessagesCounter, never()).increment();
+        verify(kafkaTemplate, never()).send(anyString(), any(), any());
     }
 
     @Test
@@ -81,17 +83,18 @@ class CommentConsumerTest {
         CommentEvent validEvent1 = new CommentEvent(1L, "Valid comment");
         CommentEvent validEvent2 = new CommentEvent(2L, "Error comment");
 
-        ConsumerRecord<String, CommentEvent> record1 = new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
+        ConsumerRecord<String, CommentEvent> record1 =
+                new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
 
         // Симулируем «битую» запись, которая бросает ошибку при вызове .value()
-        ConsumerRecord<String, CommentEvent> spyRecord2 = spy(new ConsumerRecord<>("topic", 0, 1L, "key2", validEvent2));
+        ConsumerRecord<String, CommentEvent> spyRecord2 =
+                spy(new ConsumerRecord<>("topic", 0, 1L, "key2", validEvent2));
         doThrow(new RuntimeException("Deserialization error")).when(spyRecord2).value();
 
         List<ConsumerRecord<String, CommentEvent>> batch = List.of(record1, spyRecord2);
 
         // Создаем дефолтные выполненные фьючи для заглушек
-        java.util.concurrent.CompletableFuture<?> completedFuture =
-                java.util.concurrent.CompletableFuture.completedFuture(null);
+        CompletableFuture<?> completedFuture = CompletableFuture.completedFuture(null);
 
         // Используем doReturn — он пропустит любые несовпадения типов CompletableFuture в generics
         doReturn(completedFuture).when(kafkaTemplate).send(anyString(), any(), any());
@@ -108,27 +111,77 @@ class CommentConsumerTest {
         verify(kafkaTemplate, times(1)).send(eq("topic.DLT"), eq("key2"), any());
 
         // 3. Проверяем, что валидная запись (record1) успешно ушла в бизнес-логику отправителя
-        verify(sender, times(1)).send(argThat(list -> list.size() == 1 && list.contains(validEvent1)));
+        verify(sender, times(1))
+                .send(argThat(list -> list.size() == 1 && list.contains(validEvent1)));
     }
 
     @Test
-    void shouldPropagateException_WhenSenderThrowsException() {
+    void shouldHandleExceptionAndEvacuateToDlt_WhenSenderThrowsException() {
         // Arrange
-        ConsumerRecord<String, CommentEvent> record1 = new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
-        List<ConsumerRecord<String, CommentEvent>> batch = List.of(record1);
+        CommentEvent validEvent = new CommentEvent(1L, "Test comment");
+        ConsumerRecord<String, CommentEvent> record = new ConsumerRecord<>("comments-topic", 0, 0L, "key1", validEvent);
+        List<ConsumerRecord<String, CommentEvent>> batch = List.of(record);
 
-        // Симулируем жесткое падение sender (например, если CircuitBreaker/Retry выбросили ошибку наружу)
-        CompletableFuture<Void> failedFuture = new CompletableFuture<>();
+        // Заглушка для успешной отправки в DLT
+        java.util.concurrent.CompletableFuture<?> kafkaFuture =
+                java.util.concurrent.CompletableFuture.completedFuture(null);
+        doReturn(kafkaFuture).when(kafkaTemplate).send(anyString(), any(), any());
+
+        // Имитируем падение внешнего API/Сендера
+        java.util.concurrent.CompletableFuture<?> failedFuture = new java.util.concurrent.CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("External API is dead"));
-
-        when(sender.send(anyList())).thenReturn(failedFuture);
+        doReturn(failedFuture).when(sender).send(anyList());
 
         // Act & Assert
-        // Метод .join() развернетCompletionException и выбросит исходный RuntimeException наружу в поток Кафки
-        assertThatThrownBy(() -> kafkaListener.listenInBatch(batch))
-                .hasMessageContaining("External API is dead");
+        // Мы не оборачиваем вызов в assertThatThrownBy,
+        // так как метод поглощает ошибку и возвращает управление без исключений!
+        kafkaListener.listenInBatch(batch);
 
-        // Убеждаемся, что попытка отправки была осуществлена
+        // Проверяем, что эвакуация в DLT и инкремент метрик сработали корректно
+        verify(dlqMessagesCounter, times(1)).increment(eq(1.0));
+        verify(kafkaTemplate, times(1)).send(eq("comments-topic.DLT"), eq("1"), eq(validEvent));
         verify(sender, times(1)).send(anyList());
+    }
+
+    @Test
+    void shouldEvacuateEntireBatchToDltAndIncrementMetrics_WhenSenderFailsGlobally() {
+        // Arrange
+        CommentEvent event1 = new CommentEvent(1L, "First valid comment");
+        CommentEvent event2 = new CommentEvent(2L, "Second valid comment");
+
+        // Создаем два полностью валидных сообщения в батче
+        ConsumerRecord<String, CommentEvent> record1 =
+                new ConsumerRecord<>("comments-topic", 0, 0L, "key1", event1);
+        ConsumerRecord<String, CommentEvent> record2 =
+                new ConsumerRecord<>("comments-topic", 0, 1L, "key2", event2);
+        List<ConsumerRecord<String, CommentEvent>> batch = List.of(record1, record2);
+
+        // Инициализируем выполненный фьюче для заглушки KafkaTemplate
+        java.util.concurrent.CompletableFuture<?> kafkaFuture =
+                java.util.concurrent.CompletableFuture.completedFuture(null);
+        doReturn(kafkaFuture).when(kafkaTemplate).send(anyString(), any(), any());
+
+        // ГЛАВНЫЙ СТАББИНГ: Заставляем наш sender выбросить ошибку при вызове .join()
+        java.util.concurrent.CompletableFuture<?> failedFuture = new java.util.concurrent.CompletableFuture<>();
+        failedFuture.completeExceptionally(new RuntimeException("Database is down"));
+        doReturn(failedFuture).when(sender).send(anyList());
+
+        // Act
+        // Метод не должен выбросить исключение наружу, так как блок catch поглощает и обрабатывает ошибку сендера
+        kafkaListener.listenInBatch(batch);
+
+        // Assert
+        // 1. Проверяем, что счетчик метрик увеличился ровно на РАЗМЕР батча (на 2 элемента)
+        verify(dlqMessagesCounter, times(1)).increment(eq(2.0));
+
+        // 2. Проверяем, что КАЖДОЕ сообщение из батча было отправлено в DLT-топик поштучно
+        verify(kafkaTemplate, times(1))
+                .send(eq("comments-topic.DLT"), eq("1"), eq(event1));
+        verify(kafkaTemplate, times(1))
+                .send(eq("comments-topic.DLT"), eq("2"), eq(event2));
+
+        // 3. Проверяем, что попытка отправки в основной сендер действительно была совершена
+        verify(sender, times(1)).
+                send(argThat(list -> list.size() == 2 && list.contains(event1) && list.contains(event2)));
     }
 }

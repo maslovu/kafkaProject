@@ -1,9 +1,8 @@
 package com.maslov.service;
 
 import com.maslov.dto.CommentEvent;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
@@ -12,12 +11,11 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 
 @Service
+@Slf4j
 public class KafkaDltConsumerService {
 
-    private static final Logger log = LoggerFactory.getLogger(KafkaDltConsumerService.class);
-
     @KafkaListener(
-            topics = "comments-topic.DLT", // Имя формируется по маске <исходный_топик>.DLT
+            topics = "comments-topic.DLT",
             groupId = "comment-dlt-group-id",
             containerFactory = "singleFactory"
     )
