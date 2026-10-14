@@ -87,10 +87,10 @@ public class CommentConsumerService {
 
                     sendToDlt(topic, fallbackKey, event);
                 } catch (Exception dltEx) {
-                    log.error("Критическая ошибка при попытке эвакуации сообщения в DLT: {}", event, dltEx);
+                    log.error("Critical error while attempting to offload the message to DLT: {}", event, dltEx);
                 }
             }
-            log.warn("Батч размером {} успешно эвакуирован в DLT из-за падения сендера.", events.size());
+            log.warn("Batch of size {} successfully evacuated to DLT due to sender failure", events.size());
         }
     }
 
