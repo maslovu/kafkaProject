@@ -6,107 +6,83 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 @Slf4j
 @Service
 public class CommentConsumerService {
 
-    private final Counter dlqMessagesCounter;
+    private final CommentSender sender;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final Counter dlqMessagesCounter;
 
-    private final ExternalApiSender sender;
+    private final BlockingQueue<CommentEvent> buffer = new LinkedBlockingQueue<>();
+    private static final int BATCH_SIZE_LIMIT = 50;
+    private static final String DLT_TOPIC = "comments-topic.DLT";
 
-    public CommentConsumerService(
-            ExternalApiSender sender,
-            Counter dlqMessagesCounter,
-            KafkaTemplate<String, Object> kafkaTemplate
-    ) {
+    public CommentConsumerService(CommentSender sender,
+                                  KafkaTemplate<String, Object> kafkaTemplate,
+                                  Counter dlqMessagesCounter) {
         this.sender = sender;
-        this.dlqMessagesCounter = dlqMessagesCounter;
         this.kafkaTemplate = kafkaTemplate;
+        this.dlqMessagesCounter = dlqMessagesCounter;
     }
 
     @KafkaListener(
             topics = "comments-topic",
             groupId = "comment-group-id-v3",
             concurrency = "3",
-            containerFactory = "batchFactory"
+            containerFactory = "singleFactory"
     )
-    public void listenInBatch(List<ConsumerRecord<String, CommentEvent>> batch) {
-        log.info("Got batch with size: {}", batch.size());
+    public void listen(ConsumerRecord<String, CommentEvent> record) throws InterruptedException {
+        log.debug("Message received from Kafka. Key: {}", record.key());
 
-        List<CommentEvent> events = new ArrayList<>();
+        CommentEvent event = record.value();
 
-        for (int i = 0; i < batch.size(); i++) {
-            var event = processRecord(batch.get(i), i);
-            if (event != null) {
-                events.add(event);
+        if (event != null) {
+            buffer.put(event);
+
+            if (buffer.size() >= BATCH_SIZE_LIMIT) {
+                flushBuffer();
             }
         }
-
-        // Отправляем батч и ЖДЕМ результата
-        sendBatch(events, batch.getFirst().topic());
     }
 
-    private CommentEvent processRecord(ConsumerRecord<String, CommentEvent> record, int index) {
+    @Scheduled(fixedRate = 5000)
+    public void flushBufferScheduled() {
+        if (!buffer.isEmpty()) {
+            flushBuffer();
+        }
+    }
+
+    private synchronized void flushBuffer() {
+        if (buffer.isEmpty()) {
+            return;
+        }
+
+        List<CommentEvent> batchToSend = new ArrayList<>();
+        buffer.drainTo(batchToSend);
+
+        log.info("Sending the accumulated batch. Size: {}", batchToSend.size());
+
         try {
-            // Бизнес-логика обработки конкретного сообщения
-            return record.value();
+            sender.send(batchToSend).join();
+            log.info("Batch successfully sent");
         } catch (Exception e) {
-            log.error("Error processing message at index {}", index, e);
+            log.error("Error while sending a batch. Evacuation to DLT.", e);
 
-            // 1. Увеличиваем счетчик ВРУЧНУЮ прямо в момент перехвата
-            dlqMessagesCounter.increment();
+            dlqMessagesCounter.increment(batchToSend.size());
 
-            sendToDlt(record.topic(), record.key(), null);
-        }
-        return null;
-    }
-
-    private void sendBatch(List<CommentEvent> events, String topic) {
-        try {
-            // Используем .join() или .get(), чтобы сделать вызов синхронным для потока Kafka
-            sender.send(events).join();
-            log.info("Package sends successfully. Size: {}", events.size());
-        } catch (Exception e) {
-            log.error("Global error when sending a batch via the sender. Sending clean batch to DLT.", e);
-
-            dlqMessagesCounter.increment(events.size());
-
-            // отправляем весь этот батч в DLT поштучно, так как sender его не принял
-            for (CommentEvent event : events) {
-                try {
-                    // В качестве ключа можно генерировать UUID или использовать id объекта, если он есть
-                    String fallbackKey = event.getBookId() != null ? event.getBookId().toString() : "global-err";
-
-                    sendToDlt(topic, fallbackKey, event);
-                } catch (Exception dltEx) {
-                    log.error("Critical error while attempting to offload the message to DLT: {}", event, dltEx);
-                }
+            for (CommentEvent event : batchToSend) {
+                String fallbackKey = event.getBookId() != null ? event.getBookId().toString() : "bulk-err";
+                kafkaTemplate.send(DLT_TOPIC, fallbackKey, event);
             }
-            log.warn("Batch of size {} successfully evacuated to DLT due to sender failure", events.size());
         }
-    }
-
-    private void sendToDlt(String topic, String key, CommentEvent event) {
-        String dltTopic = topic + ".DLT";
-        CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(dltTopic, key, event);
-        future.whenComplete((result, ex) -> {
-            if (ex != null) {
-                // Ошибка
-                log.error("Failed to send message with key {} to DLT topic {}: {}",
-                        key, dltTopic, ex.getMessage(), ex);
-            } else {
-                // Успех
-                log.info("Message with key {} isolated into DLT topic {} (Partition: {}, Offset: {})",
-                        key, dltTopic, result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
-            }
-        });
     }
 }

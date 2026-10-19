@@ -18,7 +18,7 @@ class KafkaBatchConsumerConfigTest {
     private ConsumerFactory<String, CommentEvent> consumerFactory;
 
     @Test
-    void consumerFactoryShouldUseErrorHandlingDeserializer() {
+    void consumerFactoryShouldUseErrorHandlingDeserializerTest() {
         DefaultKafkaConsumerFactory<String, CommentEvent> factory =
                 (DefaultKafkaConsumerFactory<String, CommentEvent>) consumerFactory;
 

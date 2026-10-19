@@ -39,6 +39,9 @@ import static org.mockito.Mockito.verify;
 @ActiveProfiles("test")
 class ExternalApiSenderTest {
 
+    public static final String COMMENT_API_BREAKER = "commentApiBreaker";
+    public static final String PATH = "/api/books/comment/batch";
+
     @Autowired
     @MockitoSpyBean
     private ExternalApiSender sender;
@@ -63,7 +66,7 @@ class ExternalApiSenderTest {
         }
 
         try {
-            CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker");
+            CircuitBreaker cb = registry.circuitBreaker(COMMENT_API_BREAKER);
             cb.transitionToClosedState();
 
             cb.reset();
@@ -73,14 +76,14 @@ class ExternalApiSenderTest {
     @AfterEach
     void tearDown() {
         try {
-            registry.remove("commentApiBreaker");
+            registry.remove(COMMENT_API_BREAKER);
         } catch (Exception ignored) {}
     }
 
     @Test
     void shouldSendBatchSuccessfullyTest() throws Exception {
         // Arrange
-        stubFor(post(urlEqualTo("/api/books/comment/batch"))
+        stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
@@ -93,21 +96,21 @@ class ExternalApiSenderTest {
         await().atMost(Duration.ofSeconds(5)).until(future::isDone);
 
         // Проверка метрик CB
-        CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker");
+        CircuitBreaker cb = registry.circuitBreaker(COMMENT_API_BREAKER);
         assertThat(cb.getMetrics().getNumberOfSuccessfulCalls()).isEqualTo(1);
 
         // Проверка логики резервного сохранения (DLQ)
         verify(sender, never()).saveToDeadLetterQueue(anyList());
 
         // Проверка запроса к WireMock
-        com.github.tomakehurst.wiremock.client.WireMock.verify(postRequestedFor(urlEqualTo("/api/books/comment/batch")));
+        com.github.tomakehurst.wiremock.client.WireMock.verify(postRequestedFor(urlEqualTo(PATH)));
     }
 
     @Test
     void shouldTriggerFallbackWhenApiIsSlowTest() throws Exception {
         // Arrange
         // Simulate slow downstream service (превышает лимит timeLimiter из yml, который равен 3s)
-        stubFor(post(urlEqualTo("/api/books/comment/batch"))
+        stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withFixedDelay(5000)));
@@ -122,7 +125,7 @@ class ExternalApiSenderTest {
         verify(sender).saveToDeadLetterQueue(argThat(list -> list.size() == 1));
 
         // Метрики должны зафиксировать неудачу
-        CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker");
+        CircuitBreaker cb = registry.circuitBreaker(COMMENT_API_BREAKER);
 
         assertThat(cb.getMetrics().getNumberOfFailedCalls()).isGreaterThanOrEqualTo(1);
     }
@@ -132,7 +135,7 @@ class ExternalApiSenderTest {
     void shouldOpenCircuitBreakerAfterMultipleFailuresTest() throws Exception {
         // Arrange
         // Получаем автомат напрямую
-        CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker");
+        CircuitBreaker cb = registry.circuitBreaker(COMMENT_API_BREAKER);
 
         cb.transitionToOpenState();
 
@@ -155,7 +158,7 @@ class ExternalApiSenderTest {
 
         // ВАЖНО: WireMock НЕ должен получить этот 4-й запрос, так как цепь открыта
         com.github.tomakehurst.wiremock.client.WireMock.verify(
-                exactly(0), postRequestedFor(urlEqualTo("/api/books/comment/batch")));
+                exactly(0), postRequestedFor(urlEqualTo(PATH)));
     }
 
     @Test
@@ -171,8 +174,8 @@ class ExternalApiSenderTest {
                         .build();
 
         // 2. Пересоздаем автомат в реестре с этой конфигурацией
-        registry.remove("commentApiBreaker");
-        CircuitBreaker cb = registry.circuitBreaker("commentApiBreaker", customConfig);
+        registry.remove(COMMENT_API_BREAKER);
+        CircuitBreaker cb = registry.circuitBreaker(COMMENT_API_BREAKER, customConfig);
 
         // 3. Выполняем чистый переход по цепочке
         cb.transitionToClosedState();
