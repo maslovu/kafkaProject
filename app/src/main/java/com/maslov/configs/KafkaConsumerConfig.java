@@ -1,8 +1,10 @@
 package com.maslov.configs;
 
 import com.maslov.dto.CommentEvent;
+import io.micrometer.core.instrument.Counter;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -16,15 +18,18 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
-public class KafkaBatchConsumerConfig {
+public class KafkaConsumerConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String servers;
@@ -85,10 +90,34 @@ public class KafkaBatchConsumerConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> singleFactory(
-            ConsumerFactory<String, CommentEvent> kafkaConsumerFactory) {
+            ConsumerFactory<String, CommentEvent> kafkaConsumerFactory,
+            KafkaTemplate<String, Object> kafkaTemplate,
+            Counter dlqMessagesCounter) {
         ConcurrentKafkaListenerContainerFactory<String, CommentEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
+
         factory.setConsumerFactory(kafkaConsumerFactory);
+        factory.setBatchListener(false);
+        factory.setConcurrency(3);
+
+        // 1. Создаём DLT-рекуперер с инкрементом счётчика
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate) {
+            @Override
+            public void accept(ConsumerRecord<?, ?> record, Exception exception) {
+                dlqMessagesCounter.increment();
+                super.accept(record, exception);
+            }
+        };
+
+        // 2. 2 повтора через 1000мс (всего 3 попытки)
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
+                recoverer,
+                new FixedBackOff(1000L, 2L)
+        );
+
+        // 3. Добавляем обработчик в фабрику
+        factory.setCommonErrorHandler(errorHandler);
+
         return factory;
     }
 

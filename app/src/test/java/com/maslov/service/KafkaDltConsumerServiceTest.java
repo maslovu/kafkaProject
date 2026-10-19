@@ -17,6 +17,8 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class KafkaDltConsumerServiceTest {
 
+    private static final String DLT_TOPIC = "comments-topic.DLT";
+
     // Используем @Spy вместо @InjectMocks, чтобы мы могли частично замокать внутренний метод saveToAuditLog
     @Spy
     private KafkaDltConsumerService dltConsumerService;
@@ -32,13 +34,13 @@ class KafkaDltConsumerServiceTest {
         commentEvent.setBookId(1L);
         commentEvent.setComment("Broke comment");
 
-        record = new ConsumerRecord<>("comments-topic.DLT", 0, 123L, "key-1", commentEvent);
+        record = new ConsumerRecord<>(DLT_TOPIC, 0, 123L, "key-1", commentEvent);
         originalTopicBytes = "comments-topic".getBytes(StandardCharsets.UTF_8);
         exceptionMessageBytes = "java.lang.RuntimeException: 500 Error".getBytes(StandardCharsets.UTF_8);
     }
 
     @Test
-    void shouldProcessDltMessageSuccessfully_WhenHeadersArePresent() {
+    void shouldProcessDltMessageSuccessfully_WhenHeadersArePresentTest() {
         // Act & Assert
         // Проверяем, что метод выполняется без исключений
         assertThatNoException().isThrownBy(() ->
@@ -51,7 +53,7 @@ class KafkaDltConsumerServiceTest {
     }
 
     @Test
-    void shouldHandleDltMessageSafely_WhenHeadersAreNull() {
+    void shouldHandleDltMessageSafely_WhenHeadersAreNullTest() {
         // Act & Assert
         // Передаем null вместо байтовых массивов заголовков (симулируем их отсутствие)
         assertThatNoException().isThrownBy(() ->
@@ -63,13 +65,13 @@ class KafkaDltConsumerServiceTest {
     }
 
     @Test
-    void shouldNotPropagateException_WhenPrivateSaveToAuditLogThrowsException() {
+    void shouldNotPropagateException_WhenPrivateSaveToAuditLogThrowsExceptionTest() {
         // Arrange
         // Передаем в ConsumerRecord значение null вместо валидного CommentEvent.
         // Когда listenDlt попытается передать его в private saveToAuditLog,
         // там гарантированно вылетит NullPointerException (или ошибка вашей бизнес-логики).
         ConsumerRecord<String, CommentEvent> brokenRecord =
-                new ConsumerRecord<>("comments-topic.DLT", 0, 123L, "key-1", null);
+                new ConsumerRecord<>(DLT_TOPIC, 0, 123L, "key-1", null);
 
         // Act & Assert
         // Самая важная проверка: даже если внутри приватного метода все упало,
