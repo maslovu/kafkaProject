@@ -10,6 +10,8 @@ feign:
       commentClient:
         name: commentClient
         url: http://api-app-service:8080/api/books
+        connectTimeout: 1000   # 1 секунда на установку соединения
+        readTimeout: 2000      # 2 секунды на ожидание ответа на каждую попытку
 
 spring:
   kafka:
