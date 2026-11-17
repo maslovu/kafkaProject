@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.kafka.support.serializer.SerializationUtils;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 
@@ -17,12 +18,13 @@ public class KafkaDltConsumerService {
     @KafkaListener(
             topics = "comments-topic.DLT",
             groupId = "comment-dlt-group-id",
-            containerFactory = "singleFactory"
+            containerFactory = "dltFactory"
     )
     public void listenDlt(
             ConsumerRecord<String, CommentEvent> record,
             @Header(name = KafkaHeaders.DLT_ORIGINAL_TOPIC, required = false) byte[] originalTopic,
-            @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) byte[] exceptionMessage) {
+            @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) byte[] exceptionMessage,
+            @Header(name = SerializationUtils.VALUE_DESERIALIZER_EXCEPTION_HEADER, required = false) byte[] deserializerEx) {
 
         String topic = originalTopic != null ? new String(originalTopic, StandardCharsets.UTF_8) : "unknown";
         String error = exceptionMessage != null ? new String(exceptionMessage, StandardCharsets.UTF_8) : "unknown";
@@ -30,13 +32,20 @@ public class KafkaDltConsumerService {
         log.error("DLT Event: Topic [{}], Error [{}], Key [{}], Body: {}",
                 topic, error, record.key(), record.value());
 
+        CommentEvent event = record.value();
+        if (event != null) {
+            // Пришел валидный CommentEvent (ошибка была при отправке по HTTP)
+            log.error("DLT Event (Valid Object): Topic [{}], Error [{}], Key [{}], Event: {}",
+                    topic, error, record.key(), event);
+        } else {
+            // Пришел битый JSON (ошибка была при десериализации)
+            log.error("DLT Event (Corrupted JSON): Topic [{}], Error [{}], Key [{}]",
+                    topic, error, record.key());
+        }
+
         try {
-            // Вызываем логику долгосрочного сохранения (БД, ELK, S3)
-            saveToAuditLog(record.value(), error, topic);
+            saveToAuditLog(event, error, topic);
         } catch (Exception e) {
-            // ВАЖНО: Перехватываем ВСЕ ошибки.
-            // Консьюмер DLT ни в коем случае не должен выбрасывать исключение наверх,
-            // иначе мы уйдем в бесконечный цикл обработки этой же битой записи.
             log.error("Critical error while attempting to log a DLT message", e);
         }
     }
