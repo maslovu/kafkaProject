@@ -22,7 +22,7 @@ spring:
       error-handler: default-error-handler
     bootstrap-servers: localhost:9092
     consumer:
-      group-id: comment-group
+      group-id: comment-group-id
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
