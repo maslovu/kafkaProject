@@ -44,12 +44,12 @@ class KafkaDltConsumerServiceTest {
         // Act & Assert
         // Проверяем, что метод выполняется без исключений
         assertThatNoException().isThrownBy(() ->
-                dltConsumerService.listenDlt(record, originalTopicBytes, exceptionMessageBytes)
+                dltConsumerService.listenDlt(record, originalTopicBytes, exceptionMessageBytes, null)
         );
 
         // Проверяем, что данные корректно распарсились и передались в метод сохранения
         verify(dltConsumerService, times(1))
-                .listenDlt(record, originalTopicBytes, exceptionMessageBytes);
+                .listenDlt(record, originalTopicBytes, exceptionMessageBytes, null);
     }
 
     @Test
@@ -57,11 +57,12 @@ class KafkaDltConsumerServiceTest {
         // Act & Assert
         // Передаем null вместо байтовых массивов заголовков (симулируем их отсутствие)
         assertThatNoException().isThrownBy(() ->
-                dltConsumerService.listenDlt(record, null, null)
+                dltConsumerService.listenDlt(record, null, null, null)
         );
 
         // Метод должен составить строки "unknown" и успешно выполниться без NullPointerException
-        verify(dltConsumerService, times(1)).listenDlt(record, null, null);
+        verify(dltConsumerService, times(1))
+                .listenDlt(record, null, null, null);
     }
 
     @Test
@@ -77,7 +78,7 @@ class KafkaDltConsumerServiceTest {
         // Самая важная проверка: даже если внутри приватного метода все упало,
         // listenDlt ОБЯЗАН перехватить ошибку в блок catch и завершиться успешно.
         assertThatNoException().isThrownBy(() ->
-                dltConsumerService.listenDlt(brokenRecord, originalTopicBytes, exceptionMessageBytes)
+                dltConsumerService.listenDlt(brokenRecord, originalTopicBytes, exceptionMessageBytes, null)
         );
     }
 }

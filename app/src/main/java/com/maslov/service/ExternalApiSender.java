@@ -56,12 +56,12 @@ public class ExternalApiSender implements CommentSender {
     public void saveToDeadLetterQueue(List<CommentEvent> batch) {
         for (CommentEvent event : batch) {
             String key = event.getBookId() != null ? event.getBookId().toString() : "fallback-err";
-            kafkaTemplate.send(DLT_TOPIC, key, event).whenComplete((result, ex) -> {
-                if (ex != null) {
-                    log.error("Failed to send to DLT: {}", ex.getMessage(), ex);
-                }
-            });
+            try {
+                kafkaTemplate.send(DLT_TOPIC, key, event);
+                log.info("Sent {} elements to DLT", batch.size());
+            } catch (Exception e) {
+                log.error("Failed to send to DLT: {}", e.getMessage());
+            }
         }
-        log.info("Sent {} elements to DLT", batch.size());
     }
 }

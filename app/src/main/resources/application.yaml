@@ -20,7 +20,7 @@ spring:
       ack-mode: MANUAL_IMMEDIATE # Коммитим вручную по завершении Future
       concurrency: 3 # Количество потоков-обработчиков пакетов
       error-handler: default-error-handler
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: kafka-service:9092
     consumer:
       group-id: comment-group-id
       auto-offset-reset: earliest

@@ -1,5 +1,6 @@
 package com.maslov.configs;
 
+import com.maslov.BaseKafkaTest;
 import com.maslov.dto.CommentEvent;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.junit.jupiter.api.Test;
@@ -8,11 +9,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
-
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 @SpringBootTest
-class KafkaBatchConsumerConfigTest {
+class KafkaBatchConsumerConfigTest extends BaseKafkaTest {
 
     @Autowired
     private ConsumerFactory<String, CommentEvent> consumerFactory;

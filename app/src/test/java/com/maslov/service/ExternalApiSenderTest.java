@@ -1,6 +1,7 @@
 package com.maslov.service;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.maslov.BaseKafkaTest;
 import com.maslov.dto.CommentEvent;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.contract.wiremock.AutoConfigureWireMock;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -28,16 +30,20 @@ import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @SpringBootTest
 @AutoConfigureWireMock(port = 0)
 @ActiveProfiles("test")
-class ExternalApiSenderTest {
+class ExternalApiSenderTest extends BaseKafkaTest {
 
     public static final String COMMENT_API_BREAKER = "commentApiBreaker";
     public static final String PATH = "/api/books/comment/batch";
@@ -45,6 +51,9 @@ class ExternalApiSenderTest {
     @Autowired
     @MockitoSpyBean
     private ExternalApiSender sender;
+
+    @Autowired
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Autowired
     private CircuitBreakerRegistry registry;
@@ -71,6 +80,8 @@ class ExternalApiSenderTest {
 
             cb.reset();
         } catch (IllegalArgumentException ignored) {}
+
+        doNothing().when(sender).saveToDeadLetterQueue(anyList());
     }
 
     @AfterEach
