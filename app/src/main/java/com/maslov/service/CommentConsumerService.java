@@ -24,7 +24,6 @@ public class CommentConsumerService {
 
     private final CommentSender sender;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final Counter dlqMessagesCounter;
 
     // Храним и само событие, и его Acknowledgment, чтобы закоммитить оффсет только после отправки
     private record QueuedItem(ConsumerRecord<String, CommentEvent> record, Acknowledgment ack) {}
@@ -34,11 +33,9 @@ public class CommentConsumerService {
     private static final String DLT_TOPIC = "comments-topic.DLT";
 
     public CommentConsumerService(CommentSender sender,
-                                  KafkaTemplate<String, Object> kafkaTemplate,
-                                  Counter dlqMessagesCounter) {
+                                  KafkaTemplate<String, Object> kafkaTemplate) {
         this.sender = sender;
         this.kafkaTemplate = kafkaTemplate;
-        this.dlqMessagesCounter = dlqMessagesCounter;
     }
 
     @KafkaListener(

@@ -30,13 +30,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -92,7 +89,7 @@ class ExternalApiSenderTest extends BaseKafkaTest {
     }
 
     @Test
-    void shouldSendBatchSuccessfullyTest() throws Exception {
+    void shouldSendBatchSuccessfullyTest() {
         // Arrange
         stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse()
@@ -118,7 +115,7 @@ class ExternalApiSenderTest extends BaseKafkaTest {
     }
 
     @Test
-    void shouldTriggerFallbackWhenApiIsSlowTest() throws Exception {
+    void shouldTriggerFallbackWhenApiIsSlowTest() {
         // Arrange
         // Simulate slow downstream service (превышает лимит timeLimiter из yml, который равен 3s)
         stubFor(post(urlEqualTo(PATH))
@@ -143,7 +140,7 @@ class ExternalApiSenderTest extends BaseKafkaTest {
 
     @Test
     @DirtiesContext
-    void shouldOpenCircuitBreakerAfterMultipleFailuresTest() throws Exception {
+    void shouldOpenCircuitBreakerAfterMultipleFailuresTest() {
         // Arrange
         // Получаем автомат напрямую
         CircuitBreaker cb = registry.circuitBreaker(COMMENT_API_BREAKER);
@@ -174,7 +171,7 @@ class ExternalApiSenderTest extends BaseKafkaTest {
 
     @Test
     @DirtiesContext
-    void shouldTransitionFromHalfOpenToClosedAfterSuccessfulCallsTest() throws Exception {
+    void shouldTransitionFromHalfOpenToClosedAfterSuccessfulCallsTest() {
         // Arrange
         // 1. Создаем кастомную конфигурацию для теста, где фиксируем размер окна в Half-Open
         CircuitBreakerConfig customConfig = CircuitBreakerConfig.custom()

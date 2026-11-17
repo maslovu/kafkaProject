@@ -22,7 +22,6 @@ import static org.mockito.ArgumentMatchers.anyList;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -71,7 +70,7 @@ class CommentConsumerTest {
         for (int i = 1; i <= 50; i++) {
             CommentEvent event = new CommentEvent((long) i, "Comment " + i);
             ConsumerRecord<String, CommentEvent> record =
-                    new ConsumerRecord<>("topic", 0, (long) i, "key" + i, event);
+                    new ConsumerRecord<>("topic", 0, i, "key" + i, event);
             kafkaListener.listen(record, ack);
         }
 

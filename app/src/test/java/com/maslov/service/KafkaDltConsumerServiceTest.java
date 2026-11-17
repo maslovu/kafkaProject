@@ -23,14 +23,13 @@ class KafkaDltConsumerServiceTest {
     @Spy
     private KafkaDltConsumerService dltConsumerService;
 
-    private CommentEvent commentEvent;
     private ConsumerRecord<String, CommentEvent> record;
     private byte[] originalTopicBytes;
     private byte[] exceptionMessageBytes;
 
     @BeforeEach
     void setUp() {
-        commentEvent = new CommentEvent();
+        CommentEvent commentEvent = new CommentEvent();
         commentEvent.setBookId(1L);
         commentEvent.setComment("Broke comment");
 
