@@ -1,7 +1,6 @@
 package com.maslov.service;
 
 import com.maslov.dto.CommentEvent;
-import io.micrometer.core.instrument.Counter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
