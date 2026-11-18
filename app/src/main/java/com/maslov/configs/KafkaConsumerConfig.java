@@ -11,13 +11,14 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
+@EnableKafka
 public class KafkaConsumerConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")
@@ -48,13 +50,8 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ProducerFactory<String, Object> producerFactory() {
-        return new DefaultKafkaProducerFactory<>(producerConfigs());
-    }
-
-    @Bean
     public KafkaTemplate<String, Object> kafkaTemplate() {
-        return new KafkaTemplate<>(producerFactory());
+        return new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(producerConfigs()));
     }
 
     @Bean
@@ -77,18 +74,6 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> batchFactory(
-            ConsumerFactory<String, CommentEvent> kafkaConsumerFactory) {
-        ConcurrentKafkaListenerContainerFactory<String, CommentEvent> factory =
-                new ConcurrentKafkaListenerContainerFactory<>();
-
-        factory.setConsumerFactory(kafkaConsumerFactory);
-        factory.setBatchListener(true); // пакетный режим
-
-        return factory;
-    }
-
-    @Bean
     public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> singleFactory(
             ConsumerFactory<String, CommentEvent> kafkaConsumerFactory,
             KafkaTemplate<String, Object> kafkaTemplate,
@@ -99,6 +84,7 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(kafkaConsumerFactory);
         factory.setBatchListener(false);
         factory.setConcurrency(3);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
 
         // 1. Создаём DLT-рекуперер с инкрементом счётчика
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate) {
@@ -137,5 +123,38 @@ public class KafkaConsumerConfig {
                 .partitions(3) // Явно говорим создать 3 партиции под concurrency
                 .replicas(1)   // Для локальной разработки или теста
                 .build();
+    }
+
+    @Bean
+    public NewTopic commentsDltTopic() {
+        return TopicBuilder.name("comments-topic.DLT")
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, CommentEvent> dltFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
+
+        // Оборачиваем и ключ, и значение в ErrorHandlingDeserializer
+        ErrorHandlingDeserializer<String> keyDeserializer =
+                new ErrorHandlingDeserializer<>(new StringDeserializer());
+        ErrorHandlingDeserializer<CommentEvent> valueDeserializer =
+                getObjectJsonDeserializer();
+
+        ConcurrentKafkaListenerContainerFactory<String, CommentEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+
+        factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
+                props,
+                keyDeserializer,
+                valueDeserializer
+        ));
+        factory.setConcurrency(1);
+        return factory;
     }
 }

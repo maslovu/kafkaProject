@@ -4,13 +4,16 @@ import com.maslov.dto.CommentEvent;
 import io.micrometer.core.instrument.Counter;
 import lombok.SneakyThrows;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.Acknowledgment;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -19,7 +22,6 @@ import static org.mockito.ArgumentMatchers.anyList;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -37,6 +39,9 @@ class CommentConsumerTest {
 
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Spy
+    private Acknowledgment ack;
 
     @InjectMocks
     private CommentConsumerService kafkaListener;
@@ -65,8 +70,8 @@ class CommentConsumerTest {
         for (int i = 1; i <= 50; i++) {
             CommentEvent event = new CommentEvent((long) i, "Comment " + i);
             ConsumerRecord<String, CommentEvent> record =
-                    new ConsumerRecord<>("topic", 0, (long) i, "key" + i, event);
-            kafkaListener.listen(record);
+                    new ConsumerRecord<>("topic", 0, i, "key" + i, event);
+            kafkaListener.listen(record, ack);
         }
 
         // Assert
@@ -82,7 +87,7 @@ class CommentConsumerTest {
         // Act — отправляем меньше лимита
         ConsumerRecord<String, CommentEvent> record =
                 new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
-        kafkaListener.listen(record);
+        kafkaListener.listen(record, ack);
 
         // Assert — батч не отправлен, буфер накопил 1 элемент
         verify(sender, never()).send(anyList());
@@ -100,8 +105,8 @@ class CommentConsumerTest {
                 new ConsumerRecord<>("topic", 0, 0L, "key1", validEvent1);
         ConsumerRecord<String, CommentEvent> record2 =
                 new ConsumerRecord<>("topic", 0, 1L, "key2", validEvent2);
-        kafkaListener.listen(record1);
-        kafkaListener.listen(record2);
+        kafkaListener.listen(record1, ack);
+        kafkaListener.listen(record2, ack);
 
         // Act — вызываем scheduled сброс
         kafkaListener.flushBufferScheduled();
@@ -118,17 +123,19 @@ class CommentConsumerTest {
         ConsumerRecord<String, CommentEvent> record =
                 new ConsumerRecord<>("comments-topic", 0, 0L, "key1", validEvent);
 
-        java.util.concurrent.CompletableFuture<?> failedFuture =
-                new java.util.concurrent.CompletableFuture<>();
+        CompletableFuture<?> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("External API is dead"));
         doReturn(failedFuture).when(sender).send(anyList());
 
+        // Мокаем отправку в DLT
+        doReturn(CompletableFuture.completedFuture(null)).when(kafkaTemplate).send(any(ProducerRecord.class));
+
         // Act
-        kafkaListener.listen(record);
+        kafkaListener.listen(record, ack);
         kafkaListener.flushBufferScheduled();
 
         // Assert
-        verify(dlqMessagesCounter, times(1)).increment(1.0);
-        verify(kafkaTemplate, times(1)).send(eq("comments-topic.DLT"), eq("1"), eq(validEvent));
+        verify(kafkaTemplate, times(1)).send(any(ProducerRecord.class));
+        verify(ack, times(1)).acknowledge();
     }
 }

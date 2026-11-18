@@ -52,12 +52,6 @@ public class CommentClientConfig {
         };
     }
 
-    @Bean
-    public feign.Retryer feignRetryer() {
-        // period: 100ms (начальная пауза), maxPeriod: 1s (максимальная пауза), maxAttempts: 3 (всего 3 попытки)
-        return new feign.Retryer.Default(100, 1000, 3);
-    }
-
     // 3. Таймауты (Критично для стабильности подов в K8s)
     @Bean
     public Client client() {
@@ -72,10 +66,12 @@ public class CommentClientConfig {
     @Bean("httpExecutor")
     public Executor httpExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(10);
-        executor.setMaxPoolSize(50);
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(20);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("http-scheduler-");
+        executor.setWaitForTasksToCompleteOnShutdown(true); // Ждем завершения активных HTTP-запросов при рестарте пода
+        executor.setAwaitTerminationSeconds(15);          // Максимум 15 секунд ожидания перед принудительной остановкой
         executor.initialize();
         return executor;
     }
