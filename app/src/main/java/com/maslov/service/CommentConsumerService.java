@@ -91,8 +91,6 @@ public class CommentConsumerService {
                         ? item.record().key()
                         : (event.getBookId() != null ? event.getBookId().toString() : "bulk-err");
                 //гарантирует, что сообщение реально ушло в DLT до того, как мы закоммитим оффсет
-
-                //todo check
                 ProducerRecord<String, Object> dltRecord = new ProducerRecord<>(DLT_TOPIC, key, event);
                 dltRecord.headers().add(KafkaHeaders.DLT_ORIGINAL_TOPIC, "comments-topic".getBytes(StandardCharsets.UTF_8));
                 dltRecord.headers().add(KafkaHeaders.DLT_EXCEPTION_MESSAGE,
